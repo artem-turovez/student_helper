@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'login_screen.dart';
+import 'login_screen.dart';
+import 'register_screen.dart';
 
 class StartScreen extends StatelessWidget {
   const StartScreen({super.key});
@@ -51,7 +54,14 @@ class StartScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: FilledButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen()
+                        ),
+                    );
+                  },
                   child: const Text(
                     'Войти',
                     style: TextStyle(fontSize: 18),
@@ -65,7 +75,14 @@ class StartScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: OutlinedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    );
+                  },
                   child: const Text(
                     'Зарегистрироваться',
                     style: TextStyle(fontSize: 18),
