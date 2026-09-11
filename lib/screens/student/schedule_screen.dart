@@ -1,6 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/lesson.dart';
+import '../../services/schedule_service.dart';
 import 'lesson_details_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -11,8 +14,18 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  final ScheduleService scheduleService = ScheduleService();
+
   int selectedDayIndex = 0;
   int weekOffset = 0;
+
+  String? groupId;
+  String? loadingError;
+
+  bool isLoadingGroup = true;
+  bool isLoadingLessons = false;
+
+  List<Lesson> lessons = [];
 
   final List<String> days = const [
     'Пн',
@@ -24,198 +37,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ];
 
   late final DateTime currentMonday;
-
-  final Map<int, List<Lesson>> weeklySchedule = {
-    0: const [
-      Lesson(
-        number: 1,
-        time: '08:00 – 09:40',
-        subject: 'Разработка программных модулей',
-        teachers: [
-          'Иванов И. И.',
-        ],
-        rooms: [
-          '301',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 2,
-        time: '09:50 – 11:30',
-        subject: 'Базы данных',
-        teachers: [
-          'Петров П. П.',
-        ],
-        rooms: [
-          '405',
-        ],
-        type: 'Лабораторная работа',
-        groupId: '4к9391',
-        subgroup: '1 подгруппа',
-      ),
-      Lesson(
-        number: 3,
-        time: '11:50 – 13:30',
-        subject: 'Иностранный язык',
-        teachers: [
-          'Кузнецова Е. С.',
-        ],
-        rooms: [
-          '118',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-        subgroup: '2 подгруппа',
-      ),
-    ],
-
-    1: const [
-      Lesson(
-        number: 2,
-        time: '09:50 – 11:30',
-        subject: 'Технология разработки программного обеспечения',
-        teachers: [
-          'Сидоров А. В.',
-        ],
-        rooms: [
-          '214',
-        ],
-        type: 'Лекция',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 3,
-        time: '11:50 – 13:30',
-        subject: 'Операционные системы',
-        teachers: [
-          'Орлов Д. П.',
-        ],
-        rooms: [
-          '302',
-        ],
-        type: 'Лабораторная работа',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 4,
-        time: '13:40 – 15:20',
-        subject: 'Физическая культура',
-        teachers: [
-          'Смирнов В. А.',
-        ],
-        rooms: [
-          'Спортзал',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-      ),
-    ],
-
-    2: const [
-      Lesson(
-        number: 1,
-        time: '08:00 – 09:40',
-        subject: 'Базы данных',
-        teachers: [
-          'Петров П. П.',
-        ],
-        rooms: [
-          '405',
-        ],
-        type: 'Лекция',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 2,
-        time: '09:50 – 11:30',
-        subject: 'Разработка программных модулей',
-        teachers: [
-          'Иванов И. И.',
-          'Семенов Д. А.',
-        ],
-        rooms: [
-          '301',
-          '302',
-        ],
-        type: 'Лабораторная работа',
-        groupId: '4к9391',
-      ),
-    ],
-
-    3: const [
-      Lesson(
-        number: 3,
-        time: '11:50 – 13:30',
-        subject: 'Иностранный язык',
-        teachers: [
-          'Кузнецова Е. С.',
-        ],
-        rooms: [
-          '118',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 4,
-        time: '13:40 – 15:20',
-        subject: 'Тестирование программного обеспечения',
-        teachers: [
-          'Морозов Н. В.',
-        ],
-        rooms: [
-          '407',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 5,
-        time: '15:40 – 17:20',
-        subject: 'Технология разработки программного обеспечения',
-        teachers: [
-          'Сидоров А. В.',
-        ],
-        rooms: [
-          '214',
-        ],
-        type: 'Практическое занятие',
-        groupId: '4к9391',
-      ),
-    ],
-
-    4: const [
-      Lesson(
-        number: 1,
-        time: '08:00 – 09:40',
-        subject: 'Операционные системы',
-        teachers: [
-          'Орлов Д. П.',
-        ],
-        rooms: [
-          '302',
-        ],
-        type: 'Лекция',
-        groupId: '4к9391',
-      ),
-      Lesson(
-        number: 2,
-        time: '09:50 – 11:30',
-        subject: 'Тестирование программного обеспечения',
-        teachers: [
-          'Морозов Н. В.',
-        ],
-        rooms: [
-          '407',
-        ],
-        type: 'Лабораторная работа',
-        groupId: '4к9391',
-      ),
-    ],
-
-    5: const [],
-  };
 
   @override
   void initState() {
@@ -235,11 +56,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     } else {
       selectedDayIndex = 0;
     }
+
+    loadStudentGroup();
   }
 
   DateTime get selectedMonday {
     return currentMonday.add(
-      Duration(days: weekOffset * 7),
+      Duration(
+        days: weekOffset * 7,
+      ),
+    );
+  }
+
+  DateTime get selectedDate {
+    return selectedMonday.add(
+      Duration(
+        days: selectedDayIndex,
+      ),
     );
   }
 
@@ -249,21 +82,155 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  void previousWeek() {
+  Future<void> loadStudentGroup() async {
+    setState(() {
+      isLoadingGroup = true;
+      loadingError = null;
+    });
+
+    try {
+      final User? user =
+          FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        throw Exception(
+          'Пользователь не авторизован',
+        );
+      }
+
+      final DocumentSnapshot<Map<String, dynamic>>
+          userDocument =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+      if (!userDocument.exists) {
+        throw Exception(
+          'Профиль пользователя не найден',
+        );
+      }
+
+      final Map<String, dynamic>? userData =
+          userDocument.data();
+
+      if (userData == null) {
+        throw Exception(
+          'Не удалось получить данные пользователя',
+        );
+      }
+
+      final String? loadedGroupId =
+          userData['groupId']?.toString();
+
+      if (loadedGroupId == null ||
+          loadedGroupId.trim().isEmpty) {
+        throw Exception(
+          'Учебная группа пользователю не назначена',
+        );
+      }
+
+      groupId = loadedGroupId;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        isLoadingGroup = false;
+      });
+
+      await loadLessons();
+    } catch (e) {
+      debugPrint(
+        'Ошибка загрузки группы пользователя: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        isLoadingGroup = false;
+        loadingError =
+            'Не удалось определить учебную группу.';
+      });
+    }
+  }
+
+  Future<void> loadLessons() async {
+    final String? currentGroupId = groupId;
+
+    if (currentGroupId == null) {
+      return;
+    }
+
+    setState(() {
+      isLoadingLessons = true;
+      loadingError = null;
+    });
+
+    try {
+      final List<Lesson> loadedLessons =
+          await scheduleService.getLessonsForDay(
+        groupId: currentGroupId,
+        date: selectedDate,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        lessons = loadedLessons;
+        isLoadingLessons = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'Ошибка загрузки расписания: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        lessons = [];
+        isLoadingLessons = false;
+        loadingError =
+            'Не удалось получить расписание. '
+            'Проверьте подключение и повторите попытку.';
+      });
+    }
+  }
+
+  Future<void> previousWeek() async {
     setState(() {
       weekOffset--;
       selectedDayIndex = 0;
     });
+
+    await loadLessons();
   }
 
-  void nextWeek() {
+  Future<void> nextWeek() async {
     setState(() {
       weekOffset++;
       selectedDayIndex = 0;
     });
+
+    await loadLessons();
   }
 
-  void returnToCurrentWeek() {
+  Future<void> selectDay(int index) async {
+    setState(() {
+      selectedDayIndex = index;
+    });
+
+    await loadLessons();
+  }
+
+  Future<void> returnToCurrentWeek() async {
     final DateTime now = DateTime.now();
 
     setState(() {
@@ -276,6 +243,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         selectedDayIndex = 0;
       }
     });
+
+    await loadLessons();
   }
 
   String getMonthName(int month) {
@@ -299,6 +268,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String getWeekTitle() {
     final DateTime monday = selectedMonday;
+
     final DateTime saturday = monday.add(
       const Duration(days: 5),
     );
@@ -342,12 +312,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<Lesson> lessons =
-        weeklySchedule[selectedDayIndex] ?? [];
-
-    final DateTime selectedDate =
-        getDateForIndex(selectedDayIndex);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -374,10 +338,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: Row(
             children: [
               IconButton(
-                onPressed: previousWeek,
+                onPressed: isLoadingLessons
+                    ? null
+                    : previousWeek,
                 icon: const Icon(
                   Icons.chevron_left,
                 ),
+                tooltip: 'Предыдущая неделя',
               ),
 
               Expanded(
@@ -406,10 +373,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
 
               IconButton(
-                onPressed: nextWeek,
+                onPressed: isLoadingLessons
+                    ? null
+                    : nextWeek,
                 icon: const Icon(
                   Icons.chevron_right,
                 ),
+                tooltip: 'Следующая неделя',
               ),
             ],
           ),
@@ -418,7 +388,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         if (weekOffset != 0)
           Center(
             child: TextButton.icon(
-              onPressed: returnToCurrentWeek,
+              onPressed: isLoadingLessons
+                  ? null
+                  : returnToCurrentWeek,
               icon: const Icon(
                 Icons.today_outlined,
                 size: 18,
@@ -439,8 +411,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
             scrollDirection: Axis.horizontal,
             itemCount: days.length,
-            separatorBuilder: (_, __) {
-              return const SizedBox(width: 10);
+            separatorBuilder: (_, _) {
+              return const SizedBox(
+                width: 10,
+              );
             },
             itemBuilder: (context, index) {
               final bool isSelected =
@@ -449,14 +423,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               final DateTime date =
                   getDateForIndex(index);
 
-              final bool today = isToday(date);
+              final bool today =
+                  isToday(date);
 
               return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    selectedDayIndex = index;
-                  });
-                },
+                onTap: isLoadingLessons
+                    ? null
+                    : () {
+                        selectDay(index);
+                      },
                 child: AnimatedContainer(
                   duration: const Duration(
                     milliseconds: 200,
@@ -464,12 +439,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   width: 58,
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? const Color(0xFF2B7FFF)
-                        : const Color(0xFF10213D),
-                    borderRadius: BorderRadius.circular(18),
-                    border: today && !isSelected
+                        ? const Color(
+                            0xFF2B7FFF,
+                          )
+                        : const Color(
+                            0xFF10213D,
+                          ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      18,
+                    ),
+                    border: today &&
+                            !isSelected
                         ? Border.all(
-                            color: const Color(0xFF2B7FFF),
+                            color:
+                                const Color(
+                              0xFF2B7FFF,
+                            ),
                             width: 1.5,
                           )
                         : null,
@@ -484,17 +470,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           fontSize: 14,
                           color: isSelected
                               ? Colors.white
-                              : const Color(0xFFB6C5E0),
+                              : const Color(
+                                  0xFFB6C5E0,
+                                ),
                         ),
                       ),
 
-                      const SizedBox(height: 6),
+                      const SizedBox(
+                        height: 6,
+                      ),
 
                       Text(
                         '${date.day}',
                         style: const TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ],
@@ -511,52 +502,102 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           padding: const EdgeInsets.symmetric(
             horizontal: 24,
           ),
-          child: Text(
-            '${selectedDate.day} ${getMonthName(selectedDate.month)}',
-            style: const TextStyle(
-              fontSize: 15,
-              color: Color(0xFFB6C5E0),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${selectedDate.day} '
+                  '${getMonthName(selectedDate.month)}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(
+                      0xFFB6C5E0,
+                    ),
+                  ),
+                ),
+              ),
+
+              if (groupId != null)
+                Text(
+                  groupId!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(
+                      0xFFB6C5E0,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
 
         const SizedBox(height: 16),
 
         Expanded(
-          child: lessons.isEmpty
-              ? const EmptySchedule()
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    24,
-                    0,
-                    24,
-                    24,
-                  ),
-                  itemCount: lessons.length,
-                  separatorBuilder: (_, __) {
-                    return const SizedBox(height: 14);
-                  },
-                  itemBuilder: (context, index) {
-                    return LessonCard(
-                      lesson: lessons[index],
-                      date: selectedDate,
-                    );
-                  },
-                ),
+          child: buildScheduleContent(),
         ),
       ],
+    );
+  }
+
+  Widget buildScheduleContent() {
+    if (isLoadingGroup ||
+        isLoadingLessons) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (loadingError != null) {
+      return ScheduleError(
+        message: loadingError!,
+        onRetry: () {
+          if (groupId == null) {
+            loadStudentGroup();
+          } else {
+            loadLessons();
+          }
+        },
+      );
+    }
+
+    if (lessons.isEmpty) {
+      return const EmptySchedule();
+    }
+
+    return RefreshIndicator(
+      onRefresh: loadLessons,
+      child: ListView.separated(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          24,
+        ),
+        itemCount: lessons.length,
+        separatorBuilder: (_, _ ) {
+          return const SizedBox(
+            height: 14,
+          );
+        },
+        itemBuilder: (context, index) {
+          return LessonCard(
+            lesson: lessons[index],
+          );
+        },
+      ),
     );
   }
 }
 
 class LessonCard extends StatelessWidget {
   final Lesson lesson;
-  final DateTime date;
 
   const LessonCard({
     super.key,
     required this.lesson,
-    required this.date,
   });
 
   @override
@@ -564,12 +605,16 @@ class LessonCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: () {
+        final DateTime lessonDate =
+            lesson.date ??
+                DateTime.now();
+
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) {
               return LessonDetailsScreen(
                 lesson: lesson,
-                date: date,
+                date: lessonDate,
               );
             },
           ),
@@ -583,24 +628,32 @@ class LessonCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Container(
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xFF2B7FFF).withValues(
+                color: const Color(
+                  0xFF2B7FFF,
+                ).withValues(
                   alpha: 0.15,
                 ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius:
+                    BorderRadius.circular(
+                  14,
+                ),
               ),
               child: Center(
                 child: Text(
                   '${lesson.number}',
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2B7FFF),
+                    fontWeight:
+                        FontWeight.bold,
+                    color:
+                        Color(0xFF2B7FFF),
                   ),
                 ),
               ),
@@ -617,7 +670,8 @@ class LessonCard extends StatelessWidget {
                     lesson.subject,
                     style: const TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
 
@@ -627,18 +681,22 @@ class LessonCard extends StatelessWidget {
                     lesson.time,
                     style: const TextStyle(
                       fontSize: 14,
-                      color: Color(0xFFB6C5E0),
+                      color:
+                          Color(0xFFB6C5E0),
                     ),
                   ),
 
                   const SizedBox(height: 12),
 
                   Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       const Icon(
                         Icons.person_outline,
                         size: 18,
-                        color: Color(0xFFB6C5E0),
+                        color:
+                            Color(0xFFB6C5E0),
                       ),
 
                       const SizedBox(width: 6),
@@ -646,9 +704,12 @@ class LessonCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           lesson.teacher,
-                          style: const TextStyle(
+                          style:
+                              const TextStyle(
                             fontSize: 14,
-                            color: Color(0xFFB6C5E0),
+                            color: Color(
+                              0xFFB6C5E0,
+                            ),
                           ),
                         ),
                       ),
@@ -658,11 +719,15 @@ class LessonCard extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       const Icon(
-                        Icons.meeting_room_outlined,
+                        Icons
+                            .meeting_room_outlined,
                         size: 18,
-                        color: Color(0xFFB6C5E0),
+                        color:
+                            Color(0xFFB6C5E0),
                       ),
 
                       const SizedBox(width: 6),
@@ -670,9 +735,12 @@ class LessonCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           lesson.room,
-                          style: const TextStyle(
+                          style:
+                              const TextStyle(
                             fontSize: 14,
-                            color: Color(0xFFB6C5E0),
+                            color: Color(
+                              0xFFB6C5E0,
+                            ),
                           ),
                         ),
                       ),
@@ -682,22 +750,30 @@ class LessonCard extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   Container(
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2B7FFF).withValues(
+                      color: const Color(
+                        0xFF2B7FFF,
+                      ).withValues(
                         alpha: 0.12,
                       ),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius:
+                          BorderRadius.circular(
+                        10,
+                      ),
                     ),
                     child: Text(
                       lesson.type,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF2B7FFF),
-                        fontWeight: FontWeight.w600,
+                        color:
+                            Color(0xFF2B7FFF),
+                        fontWeight:
+                            FontWeight.w600,
                       ),
                     ),
                   ),
@@ -713,7 +789,8 @@ class LessonCard extends StatelessWidget {
               ),
               child: Icon(
                 Icons.chevron_right,
-                color: Color(0xFFB6C5E0),
+                color:
+                    Color(0xFFB6C5E0),
               ),
             ),
           ],
@@ -724,36 +801,122 @@ class LessonCard extends StatelessWidget {
 }
 
 class EmptySchedule extends StatelessWidget {
-  const EmptySchedule({super.key});
+  const EmptySchedule({
+    super.key,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(32),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              MainAxisSize.min,
           children: [
             Icon(
-              Icons.event_available_outlined,
+              Icons
+                  .event_available_outlined,
               size: 64,
-              color: Color(0xFF2B7FFF),
+              color:
+                  Color(0xFF2B7FFF),
             ),
+
             SizedBox(height: 18),
+
             Text(
               'Занятий нет',
               style: TextStyle(
                 fontSize: 22,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
+
             SizedBox(height: 8),
+
             Text(
               'На этот день расписание пустое.',
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: Color(0xFFB6C5E0),
+                color:
+                    Color(0xFFB6C5E0),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ScheduleError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const ScheduleError({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Center(
+        child: Column(
+          mainAxisSize:
+              MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 58,
+              color:
+                  Color(0xFFB6C5E0),
+            ),
+
+            const SizedBox(height: 16),
+
+            const Text(
+              'Не удалось загрузить расписание',
+              textAlign:
+                  TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            Text(
+              message,
+              textAlign:
+                  TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color:
+                    Color(0xFFB6C5E0),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(
+                Icons.refresh,
+              ),
+              label: const Text(
+                'Повторить',
               ),
             ),
           ],
