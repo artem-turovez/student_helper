@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../student/student_home_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'verify_email_screen.dart';
@@ -54,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await user.reload();
 
-      final refreshedUser = FirebaseAuth.instance.currentUser;
+      final User? refreshedUser = FirebaseAuth.instance.currentUser;
 
       if (refreshedUser == null) {
         throw Exception('Не удалось получить пользователя');
@@ -63,9 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Вход выполнен');
       debugPrint('UID: ${refreshedUser.uid}');
       debugPrint('Email: ${refreshedUser.email}');
-      debugPrint(
-        'Email подтверждён: ${refreshedUser.emailVerified}',
-      );
+      debugPrint('Email подтверждён: ${refreshedUser.emailVerified}');
 
       if (!mounted) {
         return;
@@ -81,14 +81,72 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Вход выполнен успешно',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(refreshedUser.uid)
+              .get();
+
+      if (!userDocument.exists) {
+        throw Exception('Профиль пользователя не найден');
+      }
+
+      final Map<String, dynamic>? userData = userDocument.data();
+
+      if (userData == null) {
+        throw Exception('Не удалось получить данные профиля');
+      }
+
+      final String? role = userData['role'] as String?;
+
+      debugPrint('Роль пользователя: $role');
+
+      if (!mounted) {
+        return;
+      }
+
+      switch (role) {
+        case 'student':
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => const StudentHomeScreen(),
+            ),
+            (route) => false,
+          );
+          break;
+
+        case 'teacher':
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Интерфейс преподавателя будет добавлен позже',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          break;
+
+        case 'admin':
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Интерфейс администратора будет добавлен позже',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          break;
+
+        default:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Неизвестная роль пользователя',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
     } on FirebaseAuthException catch (e) {
       debugPrint(
         'FirebaseAuth login error: ${e.code} - ${e.message}',
@@ -139,6 +197,23 @@ class _LoginScreenState extends State<LoginScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Firestore login error: ${e.code} - ${e.message}',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Не удалось загрузить профиль: ${e.code}',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       debugPrint(
         'Неизвестная ошибка входа: $e',
@@ -171,9 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF07142B),
         surfaceTintColor: Colors.transparent,
-        title: const Text(
-          'Вход',
-        ),
+        title: const Text('Вход'),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -226,9 +299,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       return 'Введите Email';
                     }
 
-                    final email = value.trim();
+                    final String email = value.trim();
 
-                    final emailRegExp = RegExp(
+                    final RegExp emailRegExp = RegExp(
                       r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                     );
 

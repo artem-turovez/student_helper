@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../screens/auth/start_screen.dart';
+import '../screens/auth/auth_gate.dart';
 import 'theme.dart';
 
 class StudentHelperApp extends StatelessWidget {
@@ -12,7 +12,7 @@ class StudentHelperApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Помощник учащегося',
       theme: AppTheme.darkTheme,
-      home: const StartScreen(),
+      home: const AuthGate(),
     );
   }
 }

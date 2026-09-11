@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../student/student_home_screen.dart';
+
 class VerifyEmailScreen extends StatefulWidget {
   const VerifyEmailScreen({super.key});
 
@@ -20,8 +22,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   void initState() {
     super.initState();
 
-    // Каждые 3 секунды проверяем,
-    // подтвердил ли пользователь свою почту.
     timer = Timer.periodic(
       const Duration(seconds: 3),
       (_) {
@@ -44,18 +44,25 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     isChecking = true;
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
       }
 
-      // Обновляем данные пользователя с сервера Firebase.
       await user.reload();
 
-      final refreshedUser = FirebaseAuth.instance.currentUser;
+      final User? refreshedUser = FirebaseAuth.instance.currentUser;
 
-      if (refreshedUser?.emailVerified == true) {
+      if (refreshedUser == null) {
+        return;
+      }
+
+      debugPrint(
+        'Статус подтверждения Email: ${refreshedUser.emailVerified}',
+      );
+
+      if (refreshedUser.emailVerified) {
         timer?.cancel();
 
         if (!mounted) {
@@ -71,10 +78,11 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           ),
         );
 
-        // Пока главного экрана ещё нет,
-        // просто возвращаемся назад.
-        Navigator.of(context).popUntil(
-          (route) => route.isFirst,
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => const StudentHomeScreen(),
+          ),
+          (route) => false,
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -100,13 +108,17 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
       }
 
       await user.sendEmailVerification();
+
+      debugPrint(
+        'Письмо подтверждения отправлено повторно',
+      );
 
       if (!mounted) {
         return;
@@ -125,11 +137,22 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         'Ошибка повторной отправки: ${e.code} - ${e.message}',
       );
 
-      String message = 'Не удалось отправить письмо';
+      String message;
 
-      if (e.code == 'too-many-requests') {
-        message =
-            'Слишком много запросов. Попробуйте немного позже';
+      switch (e.code) {
+        case 'too-many-requests':
+          message =
+              'Слишком много запросов. Попробуйте немного позже';
+          break;
+
+        case 'network-request-failed':
+          message =
+              'Не удалось подключиться к серверу. Проверьте интернет';
+          break;
+
+        default:
+          message =
+              'Не удалось отправить письмо. Ошибка: ${e.code}';
       }
 
       if (!mounted) {
@@ -139,6 +162,23 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        'Неизвестная ошибка повторной отправки: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Произошла неизвестная ошибка',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -152,6 +192,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   }
 
   Future<void> logout() async {
+    timer?.cancel();
+
     await FirebaseAuth.instance.signOut();
 
     if (!mounted) {
@@ -165,7 +207,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final User? user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -231,7 +273,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
               const Text(
                 'Откройте письмо и перейдите по ссылке подтверждения. '
-                'После этого приложение автоматически проверит статус.',
+                'После этого приложение автоматически проверит статус '
+                'и откроет главную страницу.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
@@ -259,8 +302,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 width: double.infinity,
                 height: 52,
                 child: OutlinedButton(
-                  onPressed:
-                      isSending ? null : resendVerificationEmail,
+                  onPressed: isSending
+                      ? null
+                      : resendVerificationEmail,
                   child: isSending
                       ? const SizedBox(
                           width: 22,
