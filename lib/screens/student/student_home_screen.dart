@@ -1,70 +1,72 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../auth/start_screen.dart';
+import 'calendar_screen.dart';
+import 'contacts_screen.dart';
+import 'home_screen.dart';
+import 'profile_screen.dart';
+import 'schedule_screen.dart';
 
-class StudentHomeScreen extends StatelessWidget {
+class StudentHomeScreen extends StatefulWidget {
   const StudentHomeScreen({super.key});
 
-  Future<void> logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
+  @override
+  State<StudentHomeScreen> createState() => _StudentHomeScreenState();
+}
 
-    if (!context.mounted) {
-      return;
-    }
+class _StudentHomeScreenState extends State<StudentHomeScreen> {
+  int currentIndex = 0;
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => const StartScreen(),
-      ),
-      (route) => false,
-    );
-  }
+  final List<Widget> screens = const [
+    HomeScreen(),
+    ScheduleScreen(),
+    CalendarScreen(),
+    ContactsScreen(),
+    ProfileScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Главная',
+      body: SafeArea(
+        child: IndexedStack(
+          index: currentIndex,
+          children: screens,
         ),
-        actions: [
-          IconButton(
-            onPressed: () {
-              logout(context);
-            },
-            icon: const Icon(
-              Icons.logout,
-            ),
-            tooltip: 'Выйти',
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: currentIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            currentIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Главная',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_view_week_outlined),
+            selectedIcon: Icon(Icons.calendar_view_week),
+            label: 'Расписание',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Календарь',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'Контакты',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Профиль',
           ),
         ],
-      ),
-      body: const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Помощник учащегося',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                'Главный экран студента.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFFB6C5E0),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
