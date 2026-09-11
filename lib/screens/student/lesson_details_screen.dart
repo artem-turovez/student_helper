@@ -4,11 +4,71 @@ import '../../models/lesson.dart';
 
 class LessonDetailsScreen extends StatelessWidget {
   final Lesson lesson;
+  final DateTime date;
 
   const LessonDetailsScreen({
     super.key,
     required this.lesson,
+    required this.date,
   });
+
+  String getMonthName(int month) {
+    const List<String> months = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+
+    return months[month - 1];
+  }
+
+  String getWeekdayName(int weekday) {
+    const List<String> weekdays = [
+      'Понедельник',
+      'Вторник',
+      'Среда',
+      'Четверг',
+      'Пятница',
+      'Суббота',
+      'Воскресенье',
+    ];
+
+    return weekdays[weekday - 1];
+  }
+
+  String getFormattedDate() {
+    return '${getWeekdayName(date.weekday)}, '
+        '${date.day} ${getMonthName(date.month)} ${date.year}';
+  }
+
+  String getSubgroup() {
+    final String? subgroup = lesson.subgroup;
+
+    if (subgroup == null || subgroup.trim().isEmpty) {
+      return 'Вся группа';
+    }
+
+    return subgroup;
+  }
+
+  String getGroup() {
+    final String? groupId = lesson.groupId;
+
+    if (groupId == null || groupId.trim().isEmpty) {
+      return 'Группа не указана';
+    }
+
+    return groupId;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +134,14 @@ class LessonDetailsScreen extends StatelessWidget {
               const SizedBox(height: 14),
 
               LessonInfoTile(
+                icon: Icons.calendar_today_outlined,
+                title: 'Дата',
+                value: getFormattedDate(),
+              ),
+
+              const SizedBox(height: 12),
+
+              LessonInfoTile(
                 icon: Icons.format_list_numbered,
                 title: 'Номер пары',
                 value: '${lesson.number} пара',
@@ -87,18 +155,10 @@ class LessonDetailsScreen extends StatelessWidget {
                 value: lesson.time,
               ),
 
-              const SizedBox(height: 12),
-
-              const LessonInfoTile(
-                icon: Icons.calendar_today_outlined,
-                title: 'Дата',
-                value: 'Дата будет определяться расписанием',
-              ),
-
               const SizedBox(height: 28),
 
               const Text(
-                'Преподаватель',
+                'Преподаватели',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -107,115 +167,80 @@ class LessonDetailsScreen extends StatelessWidget {
 
               const SizedBox(height: 14),
 
-              InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Профиль преподавателя добавим позже',
-                      ),
-                      behavior: SnackBarBehavior.floating,
+              ...lesson.teachers.map(
+                (teacher) {
+                  return Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 12,
+                    ),
+                    child: TeacherCard(
+                      teacher: teacher,
                     ),
                   );
                 },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10213D),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2B7FFF)
-                              .withValues(
-                            alpha: 0.15,
-                          ),
-                          borderRadius:
-                              BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.person_outline,
-                          color: Color(0xFF2B7FFF),
-                        ),
-                      ),
+              ),
 
-                      const SizedBox(width: 16),
-
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Преподаватель',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFFB6C5E0),
-                              ),
-                            ),
-
-                            const SizedBox(height: 4),
-
-                            Text(
-                              lesson.teacher,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const Icon(
-                        Icons.chevron_right,
-                        color: Color(0xFFB6C5E0),
-                      ),
-                    ],
-                  ),
+              if (lesson.teachers.isEmpty)
+                const EmptyInfoCard(
+                  text: 'Преподаватель не указан',
                 ),
+
+              const SizedBox(height: 16),
+
+              const Text(
+                'Аудитории',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              ...lesson.rooms.map(
+                (room) {
+                  return Padding(
+                    padding: const EdgeInsets.only(
+                      bottom: 12,
+                    ),
+                    child: LessonInfoTile(
+                      icon: Icons.meeting_room_outlined,
+                      title: 'Аудитория',
+                      value: room,
+                    ),
+                  );
+                },
+              ),
+
+              if (lesson.rooms.isEmpty)
+                const EmptyInfoCard(
+                  text: 'Аудитория не указана',
+                ),
+
+              const SizedBox(height: 16),
+
+              const Text(
+                'Учебная группа',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              LessonInfoTile(
+                icon: Icons.groups_outlined,
+                title: 'Группа',
+                value: getGroup(),
               ),
 
               const SizedBox(height: 12),
 
               LessonInfoTile(
-                icon: Icons.meeting_room_outlined,
-                title: 'Аудитория',
-                value: lesson.room == 'Спортзал'
-                    ? lesson.room
-                    : 'Кабинет ${lesson.room}',
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Дополнительная информация',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              const LessonInfoTile(
-                icon: Icons.groups_outlined,
-                title: 'Учебная группа',
-                value: 'Будет загружена из расписания',
-              ),
-
-              const SizedBox(height: 12),
-
-              const LessonInfoTile(
                 icon: Icons.group_work_outlined,
                 title: 'Подгруппа',
-                value: 'Не указана',
+                value: getSubgroup(),
               ),
 
               const SizedBox(height: 28),
@@ -238,7 +263,7 @@ class LessonDetailsScreen extends StatelessWidget {
                           .showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'Список событий добавим позже',
+                            'Список учебных событий добавим позже',
                           ),
                           behavior:
                               SnackBarBehavior.floating,
@@ -282,8 +307,9 @@ class LessonDetailsScreen extends StatelessWidget {
                     SizedBox(height: 6),
 
                     Text(
-                      'Контрольные, лабораторные и другие '
-                      'учебные события будут отображаться здесь.',
+                      'Контрольные, лабораторные, тесты '
+                      'и другие учебные события будут '
+                      'отображаться здесь.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -323,6 +349,91 @@ class LessonDetailsScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class TeacherCard extends StatelessWidget {
+  final String teacher;
+
+  const TeacherCard({
+    super.key,
+    required this.teacher,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Профиль преподавателя $teacher добавим позже',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10213D),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2B7FFF).withValues(
+                  alpha: 0.15,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.person_outline,
+                color: Color(0xFF2B7FFF),
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Преподаватель',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFB6C5E0),
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    teacher,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Icon(
+              Icons.chevron_right,
+              color: Color(0xFFB6C5E0),
+            ),
+          ],
         ),
       ),
     );
@@ -372,7 +483,8 @@ class LessonInfoTile extends StatelessWidget {
 
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
@@ -396,6 +508,33 @@ class LessonInfoTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class EmptyInfoCard extends StatelessWidget {
+  final String text;
+
+  const EmptyInfoCard({
+    super.key,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10213D),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Color(0xFFB6C5E0),
+        ),
       ),
     );
   }

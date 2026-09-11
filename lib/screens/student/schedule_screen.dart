@@ -31,25 +31,42 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         number: 1,
         time: '08:00 – 09:40',
         subject: 'Разработка программных модулей',
-        teacher: 'Иванов И. И.',
-        room: '301',
+        teachers: [
+          'Иванов И. И.',
+        ],
+        rooms: [
+          '301',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 2,
         time: '09:50 – 11:30',
         subject: 'Базы данных',
-        teacher: 'Петров П. П.',
-        room: '405',
+        teachers: [
+          'Петров П. П.',
+        ],
+        rooms: [
+          '405',
+        ],
         type: 'Лабораторная работа',
+        groupId: '4к9391',
+        subgroup: '1 подгруппа',
       ),
       Lesson(
         number: 3,
         time: '11:50 – 13:30',
         subject: 'Иностранный язык',
-        teacher: 'Кузнецова Е. С.',
-        room: '118',
+        teachers: [
+          'Кузнецова Е. С.',
+        ],
+        rooms: [
+          '118',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
+        subgroup: '2 подгруппа',
       ),
     ],
 
@@ -58,25 +75,40 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         number: 2,
         time: '09:50 – 11:30',
         subject: 'Технология разработки программного обеспечения',
-        teacher: 'Сидоров А. В.',
-        room: '214',
+        teachers: [
+          'Сидоров А. В.',
+        ],
+        rooms: [
+          '214',
+        ],
         type: 'Лекция',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 3,
         time: '11:50 – 13:30',
         subject: 'Операционные системы',
-        teacher: 'Орлов Д. П.',
-        room: '302',
+        teachers: [
+          'Орлов Д. П.',
+        ],
+        rooms: [
+          '302',
+        ],
         type: 'Лабораторная работа',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 4,
         time: '13:40 – 15:20',
         subject: 'Физическая культура',
-        teacher: 'Смирнов В. А.',
-        room: 'Спортзал',
+        teachers: [
+          'Смирнов В. А.',
+        ],
+        rooms: [
+          'Спортзал',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
       ),
     ],
 
@@ -85,17 +117,29 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         number: 1,
         time: '08:00 – 09:40',
         subject: 'Базы данных',
-        teacher: 'Петров П. П.',
-        room: '405',
+        teachers: [
+          'Петров П. П.',
+        ],
+        rooms: [
+          '405',
+        ],
         type: 'Лекция',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 2,
         time: '09:50 – 11:30',
         subject: 'Разработка программных модулей',
-        teacher: 'Иванов И. И.',
-        room: '301',
+        teachers: [
+          'Иванов И. И.',
+          'Семенов Д. А.',
+        ],
+        rooms: [
+          '301',
+          '302',
+        ],
         type: 'Лабораторная работа',
+        groupId: '4к9391',
       ),
     ],
 
@@ -104,25 +148,40 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         number: 3,
         time: '11:50 – 13:30',
         subject: 'Иностранный язык',
-        teacher: 'Кузнецова Е. С.',
-        room: '118',
+        teachers: [
+          'Кузнецова Е. С.',
+        ],
+        rooms: [
+          '118',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 4,
         time: '13:40 – 15:20',
         subject: 'Тестирование программного обеспечения',
-        teacher: 'Морозов Н. В.',
-        room: '407',
+        teachers: [
+          'Морозов Н. В.',
+        ],
+        rooms: [
+          '407',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 5,
         time: '15:40 – 17:20',
         subject: 'Технология разработки программного обеспечения',
-        teacher: 'Сидоров А. В.',
-        room: '214',
+        teachers: [
+          'Сидоров А. В.',
+        ],
+        rooms: [
+          '214',
+        ],
         type: 'Практическое занятие',
+        groupId: '4к9391',
       ),
     ],
 
@@ -131,17 +190,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         number: 1,
         time: '08:00 – 09:40',
         subject: 'Операционные системы',
-        teacher: 'Орлов Д. П.',
-        room: '302',
+        teachers: [
+          'Орлов Д. П.',
+        ],
+        rooms: [
+          '302',
+        ],
         type: 'Лекция',
+        groupId: '4к9391',
       ),
       Lesson(
         number: 2,
         time: '09:50 – 11:30',
         subject: 'Тестирование программного обеспечения',
-        teacher: 'Морозов Н. В.',
-        room: '407',
+        teachers: [
+          'Морозов Н. В.',
+        ],
+        rooms: [
+          '407',
+        ],
         type: 'Лабораторная работа',
+        groupId: '4к9391',
       ),
     ],
 
@@ -309,7 +378,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 icon: const Icon(
                   Icons.chevron_left,
                 ),
-                tooltip: 'Предыдущая неделя',
               ),
 
               Expanded(
@@ -342,7 +410,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 icon: const Icon(
                   Icons.chevron_right,
                 ),
-                tooltip: 'Следующая неделя',
               ),
             ],
           ),
@@ -472,6 +539,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   itemBuilder: (context, index) {
                     return LessonCard(
                       lesson: lessons[index],
+                      date: selectedDate,
                     );
                   },
                 ),
@@ -483,10 +551,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
 class LessonCard extends StatelessWidget {
   final Lesson lesson;
+  final DateTime date;
 
   const LessonCard({
     super.key,
     required this.lesson,
+    required this.date,
   });
 
   @override
@@ -499,6 +569,7 @@ class LessonCard extends StatelessWidget {
             builder: (context) {
               return LessonDetailsScreen(
                 lesson: lesson,
+                date: date,
               );
             },
           ),
@@ -598,9 +669,7 @@ class LessonCard extends StatelessWidget {
 
                       Expanded(
                         child: Text(
-                          lesson.room == 'Спортзал'
-                              ? lesson.room
-                              : 'Кабинет ${lesson.room}',
+                          lesson.room,
                           style: const TextStyle(
                             fontSize: 14,
                             color: Color(0xFFB6C5E0),
@@ -670,9 +739,7 @@ class EmptySchedule extends StatelessWidget {
               size: 64,
               color: Color(0xFF2B7FFF),
             ),
-
             SizedBox(height: 18),
-
             Text(
               'Занятий нет',
               style: TextStyle(
@@ -680,9 +747,7 @@ class EmptySchedule extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             SizedBox(height: 8),
-
             Text(
               'На этот день расписание пустое.',
               textAlign: TextAlign.center,
