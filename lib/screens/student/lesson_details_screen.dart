@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../models/academic_event.dart';
 import '../../models/lesson.dart';
+import '../../models/teacher.dart';
 import '../../services/academic_event_service.dart';
+import '../../services/teacher_service.dart';
+import 'teacher_profile_screen.dart';
 
 class LessonDetailsScreen extends StatefulWidget {
   final Lesson lesson;
@@ -22,7 +25,8 @@ class LessonDetailsScreen extends StatefulWidget {
 
 class _LessonDetailsScreenState
     extends State<LessonDetailsScreen> {
-  final AcademicEventService _academicEventService =
+  final AcademicEventService
+      _academicEventService =
       AcademicEventService();
 
   List<AcademicEvent> _events = [];
@@ -31,6 +35,7 @@ class _LessonDetailsScreenState
   bool _hasEventsError = false;
 
   Lesson get lesson => widget.lesson;
+
   DateTime get date => widget.date;
 
   @override
@@ -62,7 +67,8 @@ class _LessonDetailsScreenState
 
     try {
       final List<AcademicEvent> events =
-          await _academicEventService.getEventsForLesson(
+          await _academicEventService
+              .getEventsForLesson(
         groupId: groupId,
         lessonId: lessonId,
       );
@@ -78,7 +84,8 @@ class _LessonDetailsScreenState
       });
     } catch (error) {
       debugPrint(
-        'Ошибка загрузки учебных событий: $error',
+        'Ошибка загрузки учебных событий: '
+        '$error',
       );
 
       if (!mounted) {
@@ -128,21 +135,30 @@ class _LessonDetailsScreenState
 
   String getFormattedDate() {
     return '${getWeekdayName(date.weekday)}, '
-        '${date.day} ${getMonthName(date.month)} ${date.year}';
+        '${date.day} '
+        '${getMonthName(date.month)} '
+        '${date.year}';
   }
 
-  String getEventDate(DateTime eventDate) {
+  String getEventDate(
+    DateTime eventDate,
+  ) {
     final String day =
-        eventDate.day.toString().padLeft(2, '0');
+        eventDate.day
+            .toString()
+            .padLeft(2, '0');
 
     final String month =
-        eventDate.month.toString().padLeft(2, '0');
+        eventDate.month
+            .toString()
+            .padLeft(2, '0');
 
     return '$day.$month.${eventDate.year}';
   }
 
   String getSubgroup() {
-    final String? subgroup = lesson.subgroup;
+    final String? subgroup =
+        lesson.subgroup;
 
     if (subgroup == null ||
         subgroup.trim().isEmpty) {
@@ -153,7 +169,8 @@ class _LessonDetailsScreenState
   }
 
   String getGroup() {
-    final String? groupId = lesson.groupId;
+    final String? groupId =
+        lesson.groupId;
 
     if (groupId == null ||
         groupId.trim().isEmpty) {
@@ -163,7 +180,9 @@ class _LessonDetailsScreenState
     return groupId;
   }
 
-  IconData getEventIcon(String type) {
+  IconData getEventIcon(
+    String type,
+  ) {
     final String normalizedType =
         type.toLowerCase();
 
@@ -179,7 +198,9 @@ class _LessonDetailsScreenState
       return Icons.assignment_outlined;
     }
 
-    if (normalizedType.contains('тест')) {
+    if (normalizedType.contains(
+      'тест',
+    )) {
       return Icons.quiz_outlined;
     }
 
@@ -189,7 +210,9 @@ class _LessonDetailsScreenState
       return Icons.school_outlined;
     }
 
-    if (normalizedType.contains('окр')) {
+    if (normalizedType.contains(
+      'окр',
+    )) {
       return Icons.fact_check_outlined;
     }
 
@@ -203,7 +226,8 @@ class _LessonDetailsScreenState
           vertical: 28,
         ),
         child: Center(
-          child: CircularProgressIndicator(),
+          child:
+              CircularProgressIndicator(),
         ),
       );
     }
@@ -212,9 +236,11 @@ class _LessonDetailsScreenState
       return _StateCard(
         icon: Icons.error_outline,
         iconColor: AppTheme.danger,
-        title: 'Не удалось загрузить события',
+        title:
+            'Не удалось загрузить события',
         description:
-            'Проверьте подключение и повторите попытку.',
+            'Проверьте подключение и '
+            'повторите попытку.',
         buttonText: 'Повторить',
         onPressed: () {
           setState(() {
@@ -233,9 +259,10 @@ class _LessonDetailsScreenState
         iconColor: AppTheme.primaryBlue,
         title: 'Событий пока нет',
         description:
-            'Контрольные, лабораторные, тесты '
-            'и другие учебные события будут '
-            'отображаться здесь.',
+            'Контрольные, лабораторные, '
+            'тесты и другие учебные '
+            'события будут отображаться '
+            'здесь.',
       );
     }
 
@@ -243,14 +270,18 @@ class _LessonDetailsScreenState
       children: _events.map(
         (event) {
           return Padding(
-            padding: const EdgeInsets.only(
+            padding:
+                const EdgeInsets.only(
               bottom: 10,
             ),
             child: AcademicEventCard(
               event: event,
-              icon: getEventIcon(event.type),
+              icon:
+                  getEventIcon(event.type),
               formattedDate:
-                  getEventDate(event.date),
+                  getEventDate(
+                event.date,
+              ),
             ),
           );
         },
@@ -258,8 +289,51 @@ class _LessonDetailsScreenState
     );
   }
 
+  Widget _buildTeachers() {
+    if (lesson.teachers.isEmpty) {
+      return const EmptyInfoCard(
+        icon: Icons.person_off_outlined,
+        text:
+            'Преподаватель не указан',
+      );
+    }
+
+    return Column(
+      children: List.generate(
+        lesson.teachers.length,
+        (index) {
+          final String teacherName =
+              lesson.teachers[index];
+
+          final String? teacherId =
+              index <
+                      lesson
+                          .teacherIds
+                          .length
+                  ? lesson.teacherIds[
+                      index]
+                  : null;
+
+          return Padding(
+            padding:
+                const EdgeInsets.only(
+              bottom: 10,
+            ),
+            child: TeacherCard(
+              teacherName:
+                  teacherName,
+              teacherId: teacherId,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -268,13 +342,17 @@ class _LessonDetailsScreenState
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadAcademicEvents,
-          color: AppTheme.primaryBlue,
-          backgroundColor: AppTheme.card,
+          onRefresh:
+              _loadAcademicEvents,
+          color:
+              AppTheme.primaryBlue,
+          backgroundColor:
+              AppTheme.card,
           child: SingleChildScrollView(
             physics:
                 const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               AppTheme.screenPadding,
               16,
               AppTheme.screenPadding,
@@ -286,99 +364,106 @@ class _LessonDetailsScreenState
               children: [
                 Text(
                   lesson.subject,
-                  style: AppTheme.pageTitle.copyWith(
+                  style: AppTheme
+                      .pageTitle
+                      .copyWith(
                     height: 1.2,
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 _TypeBadge(
                   text: lesson.type,
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(
+                  height: 30,
+                ),
 
                 const _SectionTitle(
-                  title: 'Основная информация',
+                  title:
+                      'Основная информация',
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 LessonInfoTile(
-                  icon:
-                      Icons.calendar_today_outlined,
+                  icon: Icons
+                      .calendar_today_outlined,
                   title: 'Дата',
-                  value: getFormattedDate(),
+                  value:
+                      getFormattedDate(),
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(
+                  height: 10,
+                ),
 
                 LessonInfoTile(
-                  icon:
-                      Icons.format_list_numbered,
+                  icon: Icons
+                      .format_list_numbered,
                   title: 'Номер пары',
-                  value: '${lesson.number} пара',
+                  value:
+                      '${lesson.number} пара',
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(
+                  height: 10,
+                ),
 
                 LessonInfoTile(
-                  icon:
-                      Icons.access_time_outlined,
+                  icon: Icons
+                      .access_time_outlined,
                   title: 'Время',
                   value: lesson.time,
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(
+                  height: 28,
+                ),
 
                 const _SectionTitle(
-                  title: 'Преподаватели',
+                  title:
+                      'Преподаватели',
                 ),
 
-                const SizedBox(height: 12),
-
-                ...lesson.teachers.map(
-                  (teacher) {
-                    return Padding(
-                      padding:
-                          const EdgeInsets.only(
-                        bottom: 10,
-                      ),
-                      child: TeacherCard(
-                        teacher: teacher,
-                      ),
-                    );
-                  },
+                const SizedBox(
+                  height: 12,
                 ),
 
-                if (lesson.teachers.isEmpty)
-                  const EmptyInfoCard(
-                    icon:
-                        Icons.person_off_outlined,
-                    text:
-                        'Преподаватель не указан',
-                  ),
+                _buildTeachers(),
 
-                const SizedBox(height: 28),
+                const SizedBox(
+                  height: 18,
+                ),
 
                 const _SectionTitle(
                   title: 'Аудитории',
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 ...lesson.rooms.map(
                   (room) {
                     return Padding(
                       padding:
-                          const EdgeInsets.only(
+                          const EdgeInsets
+                              .only(
                         bottom: 10,
                       ),
-                      child: LessonInfoTile(
+                      child:
+                          LessonInfoTile(
                         icon: Icons
                             .meeting_room_outlined,
-                        title: 'Аудитория',
+                        title:
+                            'Аудитория',
                         value: room,
                       ),
                     );
@@ -387,57 +472,76 @@ class _LessonDetailsScreenState
 
                 if (lesson.rooms.isEmpty)
                   const EmptyInfoCard(
-                    icon:
-                        Icons.meeting_room_outlined,
+                    icon: Icons
+                        .meeting_room_outlined,
                     text:
                         'Аудитория не указана',
                   ),
 
-                const SizedBox(height: 28),
-
-                const _SectionTitle(
-                  title: 'Учебная группа',
+                const SizedBox(
+                  height: 28,
                 ),
 
-                const SizedBox(height: 12),
+                const _SectionTitle(
+                  title:
+                      'Учебная группа',
+                ),
+
+                const SizedBox(
+                  height: 12,
+                ),
 
                 LessonInfoTile(
-                  icon: Icons.groups_outlined,
+                  icon:
+                      Icons.groups_outlined,
                   title: 'Группа',
                   value: getGroup(),
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(
+                  height: 10,
+                ),
 
                 LessonInfoTile(
-                  icon:
-                      Icons.group_work_outlined,
+                  icon: Icons
+                      .group_work_outlined,
                   title: 'Подгруппа',
                   value: getSubgroup(),
                 ),
 
-                const SizedBox(height: 28),
-
-                const _SectionTitle(
-                  title: 'Учебные события',
+                const SizedBox(
+                  height: 28,
                 ),
 
-                const SizedBox(height: 12),
+                const _SectionTitle(
+                  title:
+                      'Учебные события',
+                ),
+
+                const SizedBox(
+                  height: 12,
+                ),
 
                 _buildAcademicEvents(),
 
-                const SizedBox(height: 28),
+                const SizedBox(
+                  height: 28,
+                ),
 
                 SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
+                  width:
+                      double.infinity,
+                  child:
+                      FilledButton.icon(
                     onPressed: () {
-                      ScaffoldMessenger.of(
+                      ScaffoldMessenger
+                              .of(
                         context,
                       ).showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'Создание напоминаний добавим позже',
+                            'Создание напоминаний '
+                            'добавим позже',
                           ),
                         ),
                       );
@@ -460,7 +564,8 @@ class _LessonDetailsScreenState
   }
 }
 
-class _SectionTitle extends StatelessWidget {
+class _SectionTitle
+    extends StatelessWidget {
   final String title;
 
   const _SectionTitle({
@@ -468,7 +573,9 @@ class _SectionTitle extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Text(
       title,
       style: AppTheme.sectionTitle,
@@ -476,7 +583,8 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _TypeBadge extends StatelessWidget {
+class _TypeBadge
+    extends StatelessWidget {
   final String text;
 
   const _TypeBadge({
@@ -484,9 +592,12 @@ class _TypeBadge extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 11,
         vertical: 6,
       ),
@@ -495,16 +606,19 @@ class _TypeBadge extends StatelessWidget {
             .withValues(
           alpha: 0.12,
         ),
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           10,
         ),
       ),
       child: Text(
         text,
         style: const TextStyle(
-          color: AppTheme.primaryBlue,
+          color:
+              AppTheme.primaryBlue,
           fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontWeight:
+              FontWeight.w600,
         ),
       ),
     );
@@ -525,13 +639,17 @@ class AcademicEventCard
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.cardRadius,
         ),
       ),
@@ -543,7 +661,9 @@ class AcademicEventCard
             icon: icon,
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(
+            width: 14,
+          ),
 
           Expanded(
             child: Column(
@@ -552,26 +672,32 @@ class AcademicEventCard
               children: [
                 Text(
                   event.type,
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     fontSize: 12,
-                    color:
-                        AppTheme.primaryBlue,
+                    color: AppTheme
+                        .primaryBlue,
                     fontWeight:
                         FontWeight.w600,
                   ),
                 ),
 
-                const SizedBox(height: 4),
+                const SizedBox(
+                  height: 4,
+                ),
 
                 Text(
                   event.title,
-                  style: AppTheme.cardTitle,
+                  style:
+                      AppTheme.cardTitle,
                 ),
 
                 if (event.description
                     .trim()
                     .isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(
+                    height: 6,
+                  ),
                   Text(
                     event.description,
                     style: AppTheme
@@ -579,7 +705,9 @@ class AcademicEventCard
                   ),
                 ],
 
-                const SizedBox(height: 10),
+                const SizedBox(
+                  height: 10,
+                ),
 
                 Row(
                   children: [
@@ -587,16 +715,18 @@ class AcademicEventCard
                       Icons
                           .calendar_today_outlined,
                       size: 15,
-                      color:
-                          AppTheme.secondaryText,
+                      color: AppTheme
+                          .secondaryText,
                     ),
 
-                    const SizedBox(width: 6),
+                    const SizedBox(
+                      width: 6,
+                    ),
 
                     Text(
                       formattedDate,
-                      style:
-                          AppTheme.labelText,
+                      style: AppTheme
+                          .labelText,
                     ),
                   ],
                 ),
@@ -609,75 +739,206 @@ class AcademicEventCard
   }
 }
 
-class TeacherCard extends StatelessWidget {
-  final String teacher;
+class TeacherCard
+    extends StatefulWidget {
+  final String teacherName;
+  final String? teacherId;
 
   const TeacherCard({
     super.key,
-    required this.teacher,
+    required this.teacherName,
+    required this.teacherId,
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<TeacherCard> createState() =>
+      _TeacherCardState();
+}
+
+class _TeacherCardState
+    extends State<TeacherCard> {
+  final TeacherService _teacherService =
+      TeacherService();
+
+  bool _isLoading = false;
+
+  bool get _hasTeacherProfile {
+    final String? teacherId =
+        widget.teacherId;
+
+    return teacherId != null &&
+        teacherId.trim().isNotEmpty;
+  }
+
+  Future<void>
+      _openTeacherProfile() async {
+    final String? teacherId =
+        widget.teacherId;
+
+    if (teacherId == null ||
+        teacherId.trim().isEmpty ||
+        _isLoading) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final Teacher? teacher =
+          await _teacherService
+              .getTeacherById(
+        teacherId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (teacher == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Профиль преподавателя '
+              'не найден',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      await Navigator.of(
+        context,
+      ).push(
+        MaterialPageRoute(
+          builder: (context) =>
+              TeacherProfileScreen(
+            teacher: teacher,
+          ),
+        ),
+      );
+    } catch (error) {
+      debugPrint(
+        'Ошибка загрузки '
+        'преподавателя: $error',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Не удалось открыть '
+            'профиль преподавателя',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
     return Material(
       color: AppTheme.card,
-      borderRadius: BorderRadius.circular(
+      borderRadius:
+          BorderRadius.circular(
         AppTheme.cardRadius,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.cardRadius,
         ),
-        onTap: () {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Профиль преподавателя $teacher добавим позже',
-              ),
-            ),
-          );
-        },
+        onTap: _hasTeacherProfile
+            ? _openTeacherProfile
+            : null,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding:
+              const EdgeInsets.all(16),
           child: Row(
             children: [
               const _BlueIconBox(
-                icon: Icons.person_outline,
+                icon:
+                    Icons.person_outline,
               ),
 
-              const SizedBox(width: 14),
+              const SizedBox(
+                width: 14,
+              ),
 
               Expanded(
                 child: Column(
                   crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     const Text(
                       'Преподаватель',
-                      style:
-                          AppTheme.labelText,
+                      style: AppTheme
+                          .labelText,
                     ),
 
-                    const SizedBox(height: 3),
+                    const SizedBox(
+                      height: 3,
+                    ),
 
                     Text(
-                      teacher,
-                      style:
-                          AppTheme.cardTitle,
+                      widget.teacherName,
+                      style: AppTheme
+                          .cardTitle,
                     ),
+
+                    if (!_hasTeacherProfile) ...[
+                      const SizedBox(
+                        height: 4,
+                      ),
+                      const Text(
+                        'Профиль пока '
+                        'не привязан',
+                        style: AppTheme
+                            .labelText,
+                      ),
+                    ],
                   ],
                 ),
               ),
 
-              const SizedBox(width: 8),
-
-              const Icon(
-                Icons.chevron_right_rounded,
-                color:
-                    AppTheme.secondaryText,
+              const SizedBox(
+                width: 8,
               ),
+
+              if (_isLoading)
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                )
+              else if (_hasTeacherProfile)
+                const Icon(
+                  Icons
+                      .chevron_right_rounded,
+                  color: AppTheme
+                      .secondaryText,
+                ),
             ],
           ),
         ),
@@ -686,7 +947,8 @@ class TeacherCard extends StatelessWidget {
   }
 }
 
-class LessonInfoTile extends StatelessWidget {
+class LessonInfoTile
+    extends StatelessWidget {
   final IconData icon;
   final String title;
   final String value;
@@ -699,13 +961,17 @@ class LessonInfoTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.cardRadius,
         ),
       ),
@@ -717,7 +983,9 @@ class LessonInfoTile extends StatelessWidget {
             icon: icon,
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(
+            width: 14,
+          ),
 
           Expanded(
             child: Column(
@@ -730,7 +998,9 @@ class LessonInfoTile extends StatelessWidget {
                       AppTheme.labelText,
                 ),
 
-                const SizedBox(height: 3),
+                const SizedBox(
+                  height: 3,
+                ),
 
                 Text(
                   value,
@@ -746,7 +1016,8 @@ class LessonInfoTile extends StatelessWidget {
   }
 }
 
-class _BlueIconBox extends StatelessWidget {
+class _BlueIconBox
+    extends StatelessWidget {
   final IconData icon;
 
   const _BlueIconBox({
@@ -754,7 +1025,9 @@ class _BlueIconBox extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
       width: 44,
       height: 44,
@@ -763,20 +1036,23 @@ class _BlueIconBox extends StatelessWidget {
             .withValues(
           alpha: 0.15,
         ),
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.smallRadius,
         ),
       ),
       child: Icon(
         icon,
         size: 22,
-        color: AppTheme.primaryBlue,
+        color:
+            AppTheme.primaryBlue,
       ),
     );
   }
 }
 
-class EmptyInfoCard extends StatelessWidget {
+class EmptyInfoCard
+    extends StatelessWidget {
   final IconData icon;
   final String text;
 
@@ -787,13 +1063,17 @@ class EmptyInfoCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.cardRadius,
         ),
       ),
@@ -803,13 +1083,15 @@ class EmptyInfoCard extends StatelessWidget {
             icon: icon,
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(
+            width: 14,
+          ),
 
           Expanded(
             child: Text(
               text,
-              style:
-                  AppTheme.secondaryBodyText,
+              style: AppTheme
+                  .secondaryBodyText,
             ),
           ),
         ],
@@ -818,7 +1100,8 @@ class EmptyInfoCard extends StatelessWidget {
   }
 }
 
-class _StateCard extends StatelessWidget {
+class _StateCard
+    extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -836,16 +1119,20 @@ class _StateCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 22,
         vertical: 26,
       ),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           AppTheme.cardRadius,
         ),
       ),
@@ -855,7 +1142,8 @@ class _StateCard extends StatelessWidget {
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: iconColor.withValues(
+              color:
+                  iconColor.withValues(
                 alpha: 0.12,
               ),
               borderRadius:
@@ -870,31 +1158,43 @@ class _StateCard extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(
+            height: 14,
+          ),
 
           Text(
             title,
-            textAlign: TextAlign.center,
-            style: AppTheme.cardTitle,
+            textAlign:
+                TextAlign.center,
+            style:
+                AppTheme.cardTitle,
           ),
 
-          const SizedBox(height: 6),
+          const SizedBox(
+            height: 6,
+          ),
 
           Text(
             description,
-            textAlign: TextAlign.center,
-            style:
-                AppTheme.secondaryBodyText,
+            textAlign:
+                TextAlign.center,
+            style: AppTheme
+                .secondaryBodyText,
           ),
 
           if (buttonText != null &&
               onPressed != null) ...[
-            const SizedBox(height: 18),
+            const SizedBox(
+              height: 18,
+            ),
 
             SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onPressed,
+              width:
+                  double.infinity,
+              child:
+                  FilledButton.icon(
+                onPressed:
+                    onPressed,
                 icon: const Icon(
                   Icons.refresh,
                 ),

@@ -7,7 +7,21 @@ class Lesson {
   final String time;
   final String subject;
 
+  /// ФИО преподавателей.
+  ///
+  /// Поле сохраняем для отображения и совместимости
+  /// с уже существующими документами Firestore.
   final List<String> teachers;
+
+  /// ID преподавателей из коллекции teachers.
+  ///
+  /// Например:
+  /// [
+  ///   "teacher_test_1",
+  ///   "teacher_test_2",
+  /// ]
+  final List<String> teacherIds;
+
   final List<String> rooms;
 
   final String type;
@@ -23,6 +37,7 @@ class Lesson {
     required this.time,
     required this.subject,
     required this.teachers,
+    this.teacherIds = const [],
     required this.rooms,
     required this.type,
     this.date,
@@ -46,14 +61,20 @@ class Lesson {
     return rooms.join(', ');
   }
 
+  bool get hasLinkedTeachers {
+    return teacherIds.isNotEmpty;
+  }
+
   factory Lesson.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> document,
   ) {
-    final Map<String, dynamic>? data = document.data();
+    final Map<String, dynamic>? data =
+        document.data();
 
     if (data == null) {
       throw Exception(
-        'Документ занятия ${document.id} не содержит данных',
+        'Документ занятия ${document.id} '
+        'не содержит данных',
       );
     }
 
@@ -64,17 +85,23 @@ class Lesson {
       id: document.id,
       number: data['number'] as int? ?? 0,
       time: data['time']?.toString() ?? '',
-      subject: data['subject']?.toString() ?? '',
+      subject:
+          data['subject']?.toString() ?? '',
       teachers: List<String>.from(
-        data['teachers'] ?? [],
+        data['teachers'] ?? const [],
+      ),
+      teacherIds: List<String>.from(
+        data['teacherIds'] ?? const [],
       ),
       rooms: List<String>.from(
-        data['rooms'] ?? [],
+        data['rooms'] ?? const [],
       ),
       type: data['type']?.toString() ?? '',
       date: timestamp?.toDate(),
-      groupId: data['groupId']?.toString(),
-      subgroup: data['subgroup']?.toString(),
+      groupId:
+          data['groupId']?.toString(),
+      subgroup:
+          data['subgroup']?.toString(),
     );
   }
 
@@ -84,6 +111,7 @@ class Lesson {
       'time': time,
       'subject': subject,
       'teachers': teachers,
+      'teacherIds': teacherIds,
       'rooms': rooms,
       'type': type,
       'date': date == null
