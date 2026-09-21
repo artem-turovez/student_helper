@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Schedule parser
+tools/schedule_parser/.venv/
+tools/schedule_parser/*.pdf
+tools/schedule_parser/parsed/
