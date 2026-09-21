@@ -100,8 +100,17 @@ SUBJECT_CONTINUATION_WORDS = {
     "схемотехника",
     "моделирование",
     "статистика",
-}
 
+    # Продолжения названий предметов,
+    # которые встречаются в расписании МРК.
+    "для",
+    "приборы",
+    "качества",
+    "оптимизация",
+    "методы",
+    "технологических",
+    "и",
+}
 SUBJECT_START_MARKERS = [
     "иностранн",
     "белорусск",
@@ -110,6 +119,25 @@ SUBJECT_START_MARKERS = [
     "медицинск",
     "информационн",
 ]
+
+SUBJECT_ABBREVIATIONS = {
+    "МУ",
+    "МЭУ",
+    "КЭ",
+    "ТП",
+    "ЗИ",
+}
+
+SUBJECT_CONTINUATION_PREFIXES = {
+    "качества",
+    "оптимизация",
+    "оптимизации",
+    "технологических",
+    "элементов",
+    "методы",
+    "методов",
+    "беларуси",
+}
 
 
 def clean_text(value: Any) -> str:
@@ -209,12 +237,18 @@ def get_lesson_number_from_time(
 
     result = fallback
 
-    for number, standard_time in LESSON_STARTS.items():
+    for (
+        number,
+        standard_time,
+    ) in LESSON_STARTS.items():
         standard_minutes = time_to_minutes(
             standard_time
         )
 
-        if start_minutes >= standard_minutes:
+        if (
+            start_minutes
+            >= standard_minutes
+        ):
             result = number
         else:
             break
@@ -225,7 +259,10 @@ def get_lesson_number_from_time(
 def extract_date_from_page(
     page,
 ) -> str | None:
-    text = page.extract_text() or ""
+    text = (
+        page.extract_text()
+        or ""
+    )
 
     match = DATE_PATTERN.search(
         text
@@ -256,7 +293,9 @@ def unique_values(
             value
             and value not in result
         ):
-            result.append(value)
+            result.append(
+                value
+            )
 
     return result
 
@@ -363,7 +402,10 @@ def normalize_broken_subject_text(
 
     result = value
 
-    for pattern, replacement in replacements:
+    for (
+        pattern,
+        replacement,
+    ) in replacements:
         result = re.sub(
             pattern,
             replacement,
@@ -386,17 +428,8 @@ def join_hyphenated_lines(
     """
     Щербакова-
     Шаблова
-
     ->
     Щербакова-Шаблова
-
-    Также:
-
-    Молчан Щербакова-
-    Шаблова
-
-    ->
-    Молчан Щербакова-Шаблова
     """
 
     if not lines:
@@ -406,7 +439,10 @@ def join_hyphenated_lines(
     index = 0
 
     while index < len(lines):
-        current = lines[index].strip()
+        current = (
+            lines[index]
+            .strip()
+        )
 
         if (
             index + 1 < len(lines)
@@ -419,19 +455,25 @@ def join_hyphenated_lines(
 
             if (
                 next_line
-                and len(next_line.split()) == 1
+                and len(
+                    next_line.split()
+                ) == 1
                 and is_capitalized_word(
                     next_line
                 )
             ):
                 result.append(
-                    current + next_line
+                    current
+                    + next_line
                 )
 
                 index += 2
                 continue
 
-        result.append(current)
+        result.append(
+            current
+        )
+
         index += 1
 
     return result
@@ -441,7 +483,7 @@ def join_broken_surname_lines(
     lines: list[str],
 ) -> list[str]:
     """
-    Исправляет переносы фамилий:
+    Исправляет технические переносы:
 
     Соколовск
     ая
@@ -453,8 +495,9 @@ def join_broken_surname_lines(
     ->
     Соколовская Цедрик
 
-    Служебные слова вроде "ауд"
-    продолжением фамилии не считаются.
+    Служебные строки вроде:
+    ауд 216
+    не присоединяются.
     """
 
     if not lines:
@@ -473,9 +516,15 @@ def join_broken_surname_lines(
     index = 0
 
     while index < len(lines):
-        current = lines[index].strip()
+        current = (
+            lines[index]
+            .strip()
+        )
 
-        if index + 1 < len(lines):
+        if (
+            index + 1
+            < len(lines)
+        ):
             next_line = (
                 lines[index + 1]
                 .strip()
@@ -492,12 +541,16 @@ def join_broken_surname_lines(
             if next_words:
                 continuation = (
                     next_words[0]
-                    .strip(".,;:()[]")
+                    .strip(
+                        ".,;:()[]"
+                    )
                     .lower()
                 )
 
                 can_join = (
-                    len(current_words) == 1
+                    len(
+                        current_words
+                    ) == 1
                     and is_capitalized_word(
                         current
                     )
@@ -508,7 +561,9 @@ def join_broken_surname_lines(
                         continuation,
                     )
                     is not None
-                    and next_words[0].islower()
+                    and next_words[
+                        0
+                    ].islower()
                 )
 
                 if can_join:
@@ -533,7 +588,10 @@ def join_broken_surname_lines(
                     index += 2
                     continue
 
-        result.append(current)
+        result.append(
+            current
+        )
+
         index += 1
 
     return result
@@ -550,14 +608,20 @@ def normalize_cell_lines(
         )
 
         if line:
-            normalized.append(line)
+            normalized.append(
+                line
+            )
 
-    normalized = join_hyphenated_lines(
-        normalized
+    normalized = (
+        join_hyphenated_lines(
+            normalized
+        )
     )
 
-    normalized = join_broken_surname_lines(
-        normalized
+    normalized = (
+        join_broken_surname_lines(
+            normalized
+        )
     )
 
     return normalized
@@ -582,32 +646,34 @@ def remove_subgroup_lines(
     lines: list[str],
 ) -> list[str]:
     """
-    Удаляет отдельные служебные строки:
+    Удаляет отдельные строки:
 
-        1 подгруппа
-        (1 подгруппа)
-        2 подгруппы
+    1 подгруппа
+    (1 подгруппа)
+    2 подгруппы
 
-    Значение подгруппы уже было сохранено
-    через extract_subgroup().
-
-    Строку вида:
-        Практика 1 подгруппа
-
-    не удаляем.
+    Значение уже сохранено
+    в поле subgroup.
     """
 
     result: list[str] = []
 
     for line in lines:
-        stripped = line.strip()
+        stripped = (
+            line.strip()
+        )
 
-        if SUBGROUP_ONLY_PATTERN.fullmatch(
-            stripped
+        if (
+            SUBGROUP_ONLY_PATTERN
+            .fullmatch(
+                stripped
+            )
         ):
             continue
 
-        result.append(stripped)
+        result.append(
+            stripped
+        )
 
     return result
 
@@ -622,15 +688,21 @@ def remove_time_lines(
     remaining = []
 
     for line in lines:
-        found_time = normalize_time(
-            line
+        found_time = (
+            normalize_time(
+                line
+            )
         )
 
         if found_time is None:
-            remaining.append(line)
+            remaining.append(
+                line
+            )
             continue
 
-        custom_time = found_time
+        custom_time = (
+            found_time
+        )
 
         line_without_time = (
             TIME_PATTERN.sub(
@@ -654,7 +726,8 @@ def looks_like_simple_room(
     value: str,
 ) -> bool:
     return bool(
-        SIMPLE_ROOM_PATTERN.fullmatch(
+        SIMPLE_ROOM_PATTERN
+        .fullmatch(
             value.strip()
         )
     )
@@ -664,19 +737,17 @@ def parse_room_line(
     line: str,
 ) -> list[str] | None:
     """
-    Распознаёт строку аудиторий.
+    Распознаёт аудитории.
 
     Примеры:
 
-        304
-        215 405
-        с/з, а/з
-        с/з, а/
-        2к11 213
-        ауд 216
-        7 корпус БГУИР ауд 504
-
-    Строки подгрупп сюда не попадают.
+    304
+    215 405
+    с/з, а/з
+    с/з, а/
+    2к11 213
+    ауд 216
+    7 корпус БГУИР ауд 504
     """
 
     line = line.strip()
@@ -684,20 +755,32 @@ def parse_room_line(
     if not line:
         return None
 
-    if SUBGROUP_ONLY_PATTERN.fullmatch(
-        line
+    if (
+        SUBGROUP_ONLY_PATTERN
+        .fullmatch(
+            line
+        )
     ):
         return None
 
-    lowered = line.lower()
+    lowered = (
+        line.lower()
+    )
 
+    # Сложные места проведения
+    # сохраняем полностью.
     if (
         "корпус" in lowered
         or "бгуир" in lowered
         or "завод" in lowered
     ):
-        return [line]
+        return [
+            line
+        ]
 
+    # "ауд 216" приводим к "216",
+    # чтобы формат совпадал с обычными
+    # аудиториями.
     auditorium_match = re.fullmatch(
         r"ауд\.?\s*(.+)",
         line,
@@ -711,12 +794,32 @@ def parse_room_line(
             .strip()
         )
 
-        if room_value:
-            return [
-                f"ауд {room_value}"
-            ]
+        if not room_value:
+            return None
 
-        return None
+        parts = [
+            part.strip()
+            for part in re.split(
+                r"[\s,]+",
+                room_value,
+            )
+            if part.strip()
+        ]
+
+        if (
+            parts
+            and all(
+                looks_like_simple_room(
+                    part
+                )
+                for part in parts
+            )
+        ):
+            return parts
+
+        return [
+            room_value
+        ]
 
     parts = [
         part.strip()
@@ -750,12 +853,17 @@ def extract_rooms(
     if not lines:
         return [], []
 
-    remaining = lines.copy()
+    remaining = (
+        lines.copy()
+    )
+
     rooms: list[str] = []
 
     while remaining:
-        room_values = parse_room_line(
-            remaining[-1]
+        room_values = (
+            parse_room_line(
+                remaining[-1]
+            )
         )
 
         if room_values is None:
@@ -769,7 +877,9 @@ def extract_rooms(
         remaining.pop()
 
     return (
-        unique_values(rooms),
+        unique_values(
+            rooms
+        ),
         remaining,
     )
 
@@ -777,11 +887,15 @@ def extract_rooms(
 def is_practice(
     text: str,
 ) -> bool:
-    lowered = text.lower()
+    lowered = (
+        text.lower()
+    )
 
     return (
-        "практика" in lowered
-        or "практики" in lowered
+        "практика"
+        in lowered
+        or "практики"
+        in lowered
     )
 
 
@@ -790,18 +904,30 @@ def is_subject_continuation(
     line: str,
 ) -> bool:
     """
-    Определяет случаи, когда следующая
-    строка является продолжением предмета.
+    Определяет, является ли строка
+    продолжением названия предмета.
 
     Например:
 
-        Белорусский
-        язык
+    История
+    Беларуси
 
-    или:
+    Технология производства
+    МЭУ
 
-        Допризывная/медицинск
-        ая подготовка
+    Моделирование и
+    оптимизация ТП
+
+    Криптографические
+    методы ЗИ
+
+    Испытания и контроль
+    качества МЭУ
+
+    Моделирование и
+    оптимизация
+    технологических процессов
+    и элементов МЭУ
     """
 
     line = line.strip()
@@ -809,21 +935,46 @@ def is_subject_continuation(
     if not line:
         return False
 
-    lowered_line = line.lower()
+    lowered_line = (
+        line.lower()
+    )
 
-    if lowered_line in (
-        "язык",
-        "литература",
+    words = (
+        line.split()
+    )
+
+    if not words:
+        return False
+
+    lowered_words = [
+        word.lower()
+        for word in words
+    ]
+
+    first_word = (
+        lowered_words[0]
+    )
+
+    # Отдельная предметная аббревиатура.
+    #
+    # Например:
+    #
+    # Технология производства
+    # МЭУ
+    if (
+        len(words) == 1
+        and line.upper()
+        in SUBJECT_ABBREVIATIONS
     ):
         return True
 
-    words = lowered_line.split()
-
-    first_word = (
-        words[0]
-        if words
-        else ""
-    )
+    # Характерное начало продолжения
+    # названия предмета.
+    if (
+        first_word
+        in SUBJECT_CONTINUATION_PREFIXES
+    ):
+        return True
 
     if (
         first_word
@@ -831,13 +982,54 @@ def is_subject_continuation(
     ):
         return True
 
+    # Например:
+    #
+    # оптимизация ТП
+    # методы ЗИ
+    # качества МЭУ
+    if (
+        len(words) >= 2
+        and words[-1].upper()
+        in SUBJECT_ABBREVIATIONS
+        and (
+            first_word
+            in SUBJECT_CONTINUATION_PREFIXES
+            or first_word
+            in SUBJECT_CONTINUATION_WORDS
+        )
+    ):
+        return True
+
+    # Например:
+    #
+    # и элементов МЭУ
+    if (
+        first_word == "и"
+        and len(words) >= 2
+    ):
+        second_word = (
+            lowered_words[1]
+        )
+
+        if (
+            second_word
+            in SUBJECT_CONTINUATION_PREFIXES
+            or second_word
+            in SUBJECT_CONTINUATION_WORDS
+        ):
+            return True
+
     lowered_subject = (
         current_subject.lower()
     )
 
+    # Специальные случаи переносов
+    # языков, литературы и подготовки.
     if any(
-        marker in lowered_subject
-        for marker in SUBJECT_START_MARKERS
+        marker
+        in lowered_subject
+        for marker
+        in SUBJECT_START_MARKERS
     ):
         if (
             lowered_line.startswith(
@@ -863,17 +1055,13 @@ def split_subject_and_people(
     list[str],
 ]:
     """
-    После удаления времени, подгруппы
-    и аудиторий разбирает:
+    После удаления времени,
+    подгруппы и аудиторий
+    отделяет название предмета
+    от преподавателей.
 
-        предмет
-        преподаватель
-        преподаватель
-
-    Первая смысловая строка всегда
-    сохраняется как предмет. Благодаря
-    этому аббревиатуры ОАиП, СУБД, ТОЭ
-    и т. д. не становятся преподавателями.
+    Первая смысловая строка
+    всегда считается предметом.
     """
 
     if not lines:
@@ -891,12 +1079,16 @@ def split_subject_and_people(
     subject_lines: list[str] = []
     people_lines: list[str] = []
 
-    first_line = working[0]
+    first_line = (
+        working[0]
+    )
 
     if practice:
         if (
             PRACTICE_WITH_SUBGROUP_PATTERN
-            .fullmatch(first_line)
+            .fullmatch(
+                first_line
+            )
             or first_line.lower()
             == "практика"
         ):
@@ -914,12 +1106,18 @@ def split_subject_and_people(
 
     index = 1
 
-    while index < len(working):
-        line = working[index]
+    while index < len(
+        working
+    ):
+        line = (
+            working[index]
+        )
 
-        # Дополнительная страховка.
-        if SUBGROUP_ONLY_PATTERN.fullmatch(
-            line
+        if (
+            SUBGROUP_ONLY_PATTERN
+            .fullmatch(
+                line
+            )
         ):
             index += 1
             continue
@@ -927,13 +1125,17 @@ def split_subject_and_people(
         if (
             practice
             and PRACTICE_WITH_SUBGROUP_PATTERN
-            .fullmatch(line)
+            .fullmatch(
+                line
+            )
         ):
             index += 1
             continue
 
-        current_subject = " ".join(
-            subject_lines
+        current_subject = (
+            " ".join(
+                subject_lines
+            )
         )
 
         if is_subject_continuation(
@@ -950,18 +1152,24 @@ def split_subject_and_people(
 
         index += 1
 
-    subject = normalize_broken_subject_text(
-        " ".join(subject_lines)
+    subject = (
+        normalize_broken_subject_text(
+            " ".join(
+                subject_lines
+            )
+        )
     )
 
     teachers: list[str] = []
 
     for line in people_lines:
-        normalized = normalize_spaced_word(
-            line
+        normalized = (
+            normalize_spaced_word(
+                line
+            )
         )
 
-        # Строка с цифрами не может быть
+        # Строка с цифрами не является
         # строкой преподавателей.
         if any(
             char.isdigit()
@@ -969,9 +1177,13 @@ def split_subject_and_people(
         ):
             continue
 
-        for word in normalized.split():
-            cleaned = word.strip(
-                ".,;:()[]"
+        for word in (
+            normalized.split()
+        ):
+            cleaned = (
+                word.strip(
+                    ".,;:()[]"
+                )
             )
 
             if (
@@ -999,8 +1211,8 @@ def parse_lesson_cell(
     date: str,
     page_number: int,
 ) -> dict[str, Any] | None:
-    # sourceText сохраняем максимально
-    # близким к исходному PDF.
+    # Сохраняем исходный текст
+    # максимально близким к PDF.
     text = clean_text(
         cell
     )
@@ -1010,41 +1222,48 @@ def parse_lesson_cell(
 
     lines = [
         line.strip()
-        for line in text.split("\n")
+        for line
+        in text.split("\n")
         if line.strip()
     ]
 
     if not lines:
         return None
 
-    # Сохраняем подгруппу до удаления
-    # служебной строки.
-    subgroup = extract_subgroup(
-        text
+    subgroup = (
+        extract_subgroup(
+            text
+        )
     )
 
-    practice = is_practice(
-        text
+    practice = (
+        is_practice(
+            text
+        )
     )
 
-    # Исправляем технические переносы PDF.
-    lines = normalize_cell_lines(
-        lines
-    )
-
-    # Извлекаем нестандартное время.
-    custom_time, lines = (
-        remove_time_lines(
+    # Исправляем технические
+    # переносы PDF.
+    lines = (
+        normalize_cell_lines(
             lines
         )
     )
 
-    # Удаляем отдельные строки вида
-    # "1 подгруппа" и "(2 подгруппа)".
-    #
-    # Значение уже находится в subgroup.
-    lines = remove_subgroup_lines(
+    # Извлекаем нестандартное время.
+    (
+        custom_time,
+        lines,
+    ) = remove_time_lines(
         lines
+    )
+
+    # Подгруппа уже сохранена
+    # в subgroup.
+    lines = (
+        remove_subgroup_lines(
+            lines
+        )
     )
 
     actual_lesson_number = (
@@ -1054,21 +1273,25 @@ def parse_lesson_cell(
         )
     )
 
-    # Аудитории находятся в нижней части
-    # ячейки и удаляются до разбора предмета.
-    rooms, lines = extract_rooms(
+    # Аудитории извлекаем
+    # до разбора предмета.
+    (
+        rooms,
+        lines,
+    ) = extract_rooms(
         lines
     )
 
-    subject, teachers = (
-        split_subject_and_people(
-            lines=lines,
-            practice=practice,
-        )
+    (
+        subject,
+        teachers,
+    ) = split_subject_and_people(
+        lines=lines,
+        practice=practice,
     )
 
-    # Ячейка могла содержать только время,
-    # например 13:10-13:30.
+    # Иногда ячейка содержит
+    # только техническое время.
     if (
         not subject
         and not teachers
@@ -1077,10 +1300,14 @@ def parse_lesson_cell(
         return None
 
     if practice:
-        subject = "Практика"
+        subject = (
+            "Практика"
+        )
 
     if not subject:
-        subject = "Занятие"
+        subject = (
+            "Занятие"
+        )
 
     lesson_type = (
         "Практика"
@@ -1106,7 +1333,9 @@ def parse_lesson_cell(
         "rooms": rooms,
         "type": lesson_type,
         "subgroup": subgroup,
-        "sourcePage": page_number,
+        "sourcePage": (
+            page_number
+        ),
         "sourceText": text,
     }
 
@@ -1122,14 +1351,18 @@ def looks_like_schedule_table(
             continue
 
         row_text = " ".join(
-            clean_text(cell)
+            clean_text(
+                cell
+            )
             for cell in row
             if cell is not None
         ).lower()
 
         if (
-            "№ группы" in row_text
-            and "1 пара" in row_text
+            "№ группы"
+            in row_text
+            and "1 пара"
+            in row_text
         ):
             return True
 
@@ -1153,8 +1386,10 @@ def parse_table(
             else ""
         )
 
-        group_id = normalize_group(
-            first_cell
+        group_id = (
+            normalize_group(
+                first_cell
+            )
         )
 
         if not is_group(
@@ -1162,27 +1397,37 @@ def parse_table(
         ):
             continue
 
-        lesson_cells = row[1:8]
+        lesson_cells = (
+            row[1:8]
+        )
 
-        while len(
-            lesson_cells
-        ) < 7:
+        while (
+            len(lesson_cells)
+            < 7
+        ):
             lesson_cells.append(
                 None
             )
 
-        for index, cell in enumerate(
+        for (
+            index,
+            cell,
+        ) in enumerate(
             lesson_cells,
             start=1,
         ):
-            parsed = parse_lesson_cell(
-                cell=clean_text(
-                    cell
-                ),
-                group_id=group_id,
-                lesson_number=index,
-                date=date,
-                page_number=page_number,
+            parsed = (
+                parse_lesson_cell(
+                    cell=clean_text(
+                        cell
+                    ),
+                    group_id=group_id,
+                    lesson_number=index,
+                    date=date,
+                    page_number=(
+                        page_number
+                    ),
+                )
             )
 
             if parsed is not None:
@@ -1211,8 +1456,12 @@ def parse_pdf(
     schedule_pages = []
 
     table_settings = {
-        "vertical_strategy": "lines",
-        "horizontal_strategy": "lines",
+        "vertical_strategy": (
+            "lines"
+        ),
+        "horizontal_strategy": (
+            "lines"
+        ),
         "intersection_tolerance": 5,
         "snap_tolerance": 4,
         "join_tolerance": 4,
@@ -1222,14 +1471,21 @@ def parse_pdf(
     with pdfplumber.open(
         pdf_path,
     ) as pdf:
-        for page_index, page in enumerate(
+        for (
+            page_index,
+            page,
+        ) in enumerate(
             pdf.pages,
             start=1,
         ):
-            # Пока обрабатываем страницы 1–6.
+            # Пока обрабатываем
+            # страницы 1–6.
             #
-            # 7 страница имеет другую структуру,
-            # 8 страница содержит факультативы.
+            # Страница 7 имеет другую
+            # структуру.
+            #
+            # Страница 8 содержит
+            # факультативы.
             if page_index > 6:
                 continue
 
@@ -1241,34 +1497,50 @@ def parse_pdf(
 
             if (
                 detected_date is None
-                and page_date is not None
+                and page_date
+                is not None
             ):
                 detected_date = (
                     page_date
                 )
 
-            tables = page.extract_tables(
-                table_settings
+            tables = (
+                page.extract_tables(
+                    table_settings
+                )
             )
 
-            page_has_schedule = False
+            page_has_schedule = (
+                False
+            )
 
             for table in tables:
-                if not looks_like_schedule_table(
-                    table
+                if not (
+                    looks_like_schedule_table(
+                        table
+                    )
                 ):
                     continue
 
-                if detected_date is None:
+                if (
+                    detected_date
+                    is None
+                ):
                     continue
 
-                page_has_schedule = True
+                page_has_schedule = (
+                    True
+                )
 
                 lessons.extend(
                     parse_table(
                         table=table,
-                        date=detected_date,
-                        page_number=page_index,
+                        date=(
+                            detected_date
+                        ),
+                        page_number=(
+                            page_index
+                        ),
                     )
                 )
 
@@ -1279,8 +1551,8 @@ def parse_pdf(
 
     if detected_date is None:
         raise ValueError(
-            "Не удалось определить дату "
-            "расписания из PDF."
+            "Не удалось определить "
+            "дату расписания из PDF."
         )
 
     lessons.sort(
@@ -1294,13 +1566,17 @@ def parse_pdf(
     )
 
     return {
-        "sourceFile": pdf_path.name,
-        "date": detected_date,
+        "sourceFile": (
+            pdf_path.name
+        ),
+        "date": (
+            detected_date
+        ),
         "schedulePages": (
             schedule_pages
         ),
-        "lessonCount": len(
-            lessons
+        "lessonCount": (
+            len(lessons)
         ),
         "lessons": lessons,
     }
@@ -1315,9 +1591,13 @@ def save_result(
         exist_ok=True,
     )
 
-    source_name = Path(
-        data["sourceFile"]
-    ).stem
+    source_name = (
+        Path(
+            data[
+                "sourceFile"
+            ]
+        ).stem
+    )
 
     output_path = (
         output_dir
@@ -1343,7 +1623,9 @@ def print_summary(
 ) -> None:
     print()
     print("=" * 60)
-    print("РЕЗУЛЬТАТ ПАРСИНГА")
+    print(
+        "РЕЗУЛЬТАТ ПАРСИНГА"
+    )
     print("=" * 60)
 
     print(
@@ -1381,7 +1663,8 @@ def print_summary(
 
     practice_count = sum(
         1
-        for lesson in data["lessons"]
+        for lesson
+        in data["lessons"]
         if lesson["type"]
         == "Практика"
     )
@@ -1418,15 +1701,20 @@ def print_summary(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Парсер PDF-расписания МРК"
+    parser = (
+        argparse.ArgumentParser(
+            description=(
+                "Парсер "
+                "PDF-расписания МРК"
+            )
         )
     )
 
     parser.add_argument(
         "pdf",
-        help="Путь к PDF-файлу",
+        help=(
+            "Путь к PDF-файлу"
+        ),
     )
 
     parser.add_argument(
@@ -1438,11 +1726,17 @@ def main() -> None:
         ),
     )
 
-    args = parser.parse_args()
+    args = (
+        parser.parse_args()
+    )
 
-    pdf_path = Path(
-        args.pdf
-    ).expanduser().resolve()
+    pdf_path = (
+        Path(
+            args.pdf
+        )
+        .expanduser()
+        .resolve()
+    )
 
     if not pdf_path.exists():
         raise FileNotFoundError(
@@ -1459,9 +1753,13 @@ def main() -> None:
         pdf_path
     )
 
-    output_path = save_result(
-        data,
-        Path(args.output),
+    output_path = (
+        save_result(
+            data,
+            Path(
+                args.output
+            ),
+        )
     )
 
     print_summary(

@@ -2,11 +2,10 @@ import argparse
 import hashlib
 import json
 import re
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-from firebase_admin import firestore
 
 from firebase_connection import get_firestore_client
 
@@ -25,9 +24,16 @@ def load_schedule(
     ) as file:
         data = json.load(file)
 
-    if "lessons" not in data:
+    if not isinstance(data, dict):
         raise ValueError(
-            "В JSON отсутствует поле lessons."
+            "Корневой элемент JSON должен быть объектом."
+        )
+
+    lessons = data.get("lessons")
+
+    if not isinstance(lessons, list):
+        raise ValueError(
+            "В JSON отсутствует список lessons."
         )
 
     return data
@@ -36,7 +42,7 @@ def load_schedule(
 def normalize_name(
     value: str,
 ) -> str:
-    value = value.lower().strip()
+    value = str(value).lower().strip()
 
     value = value.replace(
         "ё",
@@ -68,20 +74,25 @@ def get_surname(
 def load_teachers(
     db,
 ) -> list[dict[str, Any]]:
-    teachers = []
+    teachers: list[dict[str, Any]] = []
 
     for document in (
         db.collection("teachers").stream()
     ):
-        data = document.to_dict()
+        data = document.to_dict() or {}
+
+        name = str(
+            data.get(
+                "name",
+                "",
+            )
+            or ""
+        ).strip()
 
         teachers.append(
             {
                 "id": document.id,
-                "name": (
-                    data.get("name", "")
-                    or ""
-                ).strip(),
+                "name": name,
                 "data": data,
             }
         )
@@ -89,64 +100,168 @@ def load_teachers(
     return teachers
 
 
+def build_teacher_indexes(
+    teachers: list[dict[str, Any]],
+) -> tuple[
+    dict[str, list[dict[str, Any]]],
+    dict[str, list[dict[str, Any]]],
+]:
+    full_name_index: dict[
+        str,
+        list[dict[str, Any]],
+    ] = defaultdict(list)
+
+    surname_index: dict[
+        str,
+        list[dict[str, Any]],
+    ] = defaultdict(list)
+
+    for teacher in teachers:
+        name = teacher["name"]
+
+        normalized_name = normalize_name(
+            name,
+        )
+
+        surname = get_surname(
+            name,
+        )
+
+        if normalized_name:
+            full_name_index[
+                normalized_name
+            ].append(teacher)
+
+        if surname:
+            surname_index[
+                surname
+            ].append(teacher)
+
+    return (
+        dict(full_name_index),
+        dict(surname_index),
+    )
+
+
 def find_teacher(
     parsed_name: str,
-    teachers: list[dict[str, Any]],
-) -> dict[str, Any] | None:
+    full_name_index: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+    surname_index: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+) -> tuple[
+    str,
+    dict[str, Any] | None,
+    list[dict[str, Any]],
+]:
+    """
+    Возвращает:
+
+    status:
+        matched
+        unresolved
+        ambiguous
+
+    teacher:
+        найденный преподаватель
+        либо None
+
+    candidates:
+        список кандидатов при
+        неоднозначном совпадении
+    """
+
     parsed_normalized = normalize_name(
         parsed_name,
     )
+
+    if not parsed_normalized:
+        return (
+            "unresolved",
+            None,
+            [],
+        )
+
+    exact_matches = full_name_index.get(
+        parsed_normalized,
+        [],
+    )
+
+    if len(exact_matches) == 1:
+        return (
+            "matched",
+            exact_matches[0],
+            exact_matches,
+        )
+
+    if len(exact_matches) > 1:
+        return (
+            "ambiguous",
+            None,
+            exact_matches,
+        )
 
     parsed_surname = get_surname(
         parsed_name,
     )
 
-    if not parsed_normalized:
-        return None
+    if not parsed_surname:
+        return (
+            "unresolved",
+            None,
+            [],
+        )
 
-    # Сначала пытаемся найти точное
-    # совпадение полного имени.
-    exact_matches = [
-        teacher
-        for teacher in teachers
-        if normalize_name(
-            teacher["name"]
-        ) == parsed_normalized
-    ]
+    surname_matches = surname_index.get(
+        parsed_surname,
+        [],
+    )
 
-    if len(exact_matches) == 1:
-        return exact_matches[0]
-
-    # В PDF чаще всего указана только
-    # фамилия преподавателя.
-    surname_matches = [
-        teacher
-        for teacher in teachers
-        if get_surname(
-            teacher["name"]
-        ) == parsed_surname
-    ]
-
-    # Связываем автоматически только тогда,
-    # когда фамилия однозначна.
     if len(surname_matches) == 1:
-        return surname_matches[0]
+        return (
+            "matched",
+            surname_matches[0],
+            surname_matches,
+        )
 
-    return None
+    if len(surname_matches) > 1:
+        return (
+            "ambiguous",
+            None,
+            surname_matches,
+        )
+
+    return (
+        "unresolved",
+        None,
+        [],
+    )
 
 
 def make_lesson_id(
     lesson: dict[str, Any],
 ) -> str:
     """
-    Создаём стабильный ID.
+    Создаём стабильный ID документа.
 
-    Один и тот же урок при повторном
-    импорте получит тот же ID.
+    При повторном импорте одного и того же
+    занятия будет получен тот же ID.
 
-    Подгруппа и время обязательно входят
-    в ID, потому что у двух подгрупп может
-    быть одинаковый номер пары.
+    В ID входят:
+    дата,
+    группа,
+    номер пары,
+    время,
+    подгруппа,
+    предмет.
+
+    Преподаватели и аудитории специально
+    не входят в ID, чтобы исправление этих
+    данных не создавало новый документ.
     """
 
     parts = [
@@ -194,18 +309,18 @@ def make_lesson_id(
         source.encode("utf-8")
     ).hexdigest()[:16]
 
-    date = (
-        str(
-            lesson.get(
-                "date",
-                "",
-            )
+    date = str(
+        lesson.get(
+            "date",
+            "",
         )
-        .replace("-", "")
+    ).replace(
+        "-",
+        "",
     )
 
     group = re.sub(
-        r"[^0-9A-Za-zА-Яа-я]",
+        r"[^0-9A-Za-zА-Яа-яЁё]",
         "",
         str(
             lesson.get(
@@ -225,80 +340,314 @@ def make_lesson_id(
 def parse_firestore_date(
     value: str,
 ) -> datetime:
+    if not value:
+        raise ValueError(
+            "У занятия отсутствует дата."
+        )
+
     return datetime.strptime(
         value,
         "%Y-%m-%d",
     )
 
 
-def prepare_lesson(
+def validate_lesson(
     lesson: dict[str, Any],
-    teachers: list[dict[str, Any]],
-) -> tuple[
-    dict[str, Any],
-    list[str],
-]:
-    teacher_ids = []
-    unmatched = []
+    index: int,
+) -> None:
+    required_fields = [
+        "date",
+        "groupId",
+        "number",
+        "time",
+        "subject",
+    ]
 
-    for teacher_name in lesson.get(
-        "teachers",
-        [],
-    ):
-        teacher = find_teacher(
-            teacher_name,
-            teachers,
-        )
+    missing = []
 
-        if teacher is None:
-            unmatched.append(
-                teacher_name,
-            )
+    for field in required_fields:
+        value = lesson.get(field)
+
+        if value is None:
+            missing.append(field)
             continue
 
-        teacher_ids.append(
-            teacher["id"],
+        if (
+            isinstance(value, str)
+            and not value.strip()
+        ):
+            missing.append(field)
+
+    if missing:
+        raise ValueError(
+            "Некорректное занятие "
+            f"#{index + 1}: отсутствуют поля "
+            f"{', '.join(missing)}. "
+            f"Данные: {lesson}"
         )
 
-    firestore_lesson = {
-        "date": parse_firestore_date(
-            lesson["date"]
-        ),
-        "groupId": lesson.get(
-            "groupId",
-        ),
-        "number": lesson.get(
-            "number",
-        ),
-        "time": lesson.get(
-            "time",
-            "",
-        ),
-        "subject": lesson.get(
-            "subject",
-            "",
-        ),
-        "teachers": lesson.get(
+    if not isinstance(
+        lesson.get(
             "teachers",
             [],
         ),
-        "teacherIds": teacher_ids,
-        "rooms": lesson.get(
+        list,
+    ):
+        raise ValueError(
+            "Некорректное занятие "
+            f"#{index + 1}: teachers "
+            "должен быть списком."
+        )
+
+    if not isinstance(
+        lesson.get(
             "rooms",
             [],
         ),
-        "type": lesson.get(
-            "type",
-            "",
+        list,
+    ):
+        raise ValueError(
+            "Некорректное занятие "
+            f"#{index + 1}: rooms "
+            "должен быть списком."
+        )
+
+
+def prepare_lesson(
+    lesson: dict[str, Any],
+    full_name_index: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+    surname_index: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+) -> tuple[
+    dict[str, Any],
+    list[str],
+    dict[str, list[str]],
+    list[str],
+]:
+    parsed_teachers = [
+        str(name).strip()
+        for name in lesson.get(
+            "teachers",
+            [],
+        )
+        if str(name).strip()
+    ]
+
+    resolved_ids: list[str] = []
+    matched: list[str] = []
+    unresolved: list[str] = []
+
+    ambiguous: dict[
+        str,
+        list[str],
+    ] = {}
+
+    all_resolved = True
+
+    for teacher_name in parsed_teachers:
+        (
+            status,
+            teacher,
+            candidates,
+        ) = find_teacher(
+            teacher_name,
+            full_name_index,
+            surname_index,
+        )
+
+        if (
+            status == "matched"
+            and teacher is not None
+        ):
+            matched.append(
+                teacher_name
+            )
+
+            resolved_ids.append(
+                teacher["id"]
+            )
+
+            continue
+
+        all_resolved = False
+
+        if status == "ambiguous":
+            ambiguous[
+                teacher_name
+            ] = [
+                (
+                    f"{candidate['name']} "
+                    f"[{candidate['id']}]"
+                )
+                for candidate in candidates
+            ]
+
+            continue
+
+        unresolved.append(
+            teacher_name
+        )
+
+    # Критически важно:
+    #
+    # Flutter использует параллельные массивы:
+    #
+    # teachers[i] <-> teacherIds[i]
+    #
+    # Поэтому частично заполненный teacherIds
+    # записывать нельзя.
+    if (
+        parsed_teachers
+        and all_resolved
+        and len(resolved_ids)
+        == len(parsed_teachers)
+    ):
+        teacher_ids = resolved_ids
+    else:
+        teacher_ids = []
+
+    firestore_lesson = {
+        "date": parse_firestore_date(
+            str(
+                lesson["date"]
+            )
         ),
-        "subgroup": lesson.get(
-            "subgroup",
+        "groupId": str(
+            lesson.get(
+                "groupId",
+                "",
+            )
+        ),
+        "number": int(
+            lesson.get(
+                "number",
+                0,
+            )
+        ),
+        "time": str(
+            lesson.get(
+                "time",
+                "",
+            )
+        ),
+        "subject": str(
+            lesson.get(
+                "subject",
+                "",
+            )
+        ),
+        "teachers": parsed_teachers,
+        "teacherIds": teacher_ids,
+        "rooms": [
+            str(room).strip()
+            for room in lesson.get(
+                "rooms",
+                [],
+            )
+            if str(room).strip()
+        ],
+        "type": str(
+            lesson.get(
+                "type",
+                "",
+            )
+            or ""
+        ),
+        "subgroup": (
+            str(
+                lesson.get(
+                    "subgroup"
+                )
+            )
+            if lesson.get(
+                "subgroup"
+            ) is not None
+            else None
         ),
     }
 
     return (
         firestore_lesson,
-        unmatched,
+        unresolved,
+        ambiguous,
+        matched,
+    )
+
+
+def check_document_id_collisions(
+    prepared: list[
+        tuple[
+            str,
+            dict[str, Any],
+        ]
+    ],
+) -> None:
+    by_id: dict[
+        str,
+        list[dict[str, Any]],
+    ] = defaultdict(list)
+
+    for (
+        document_id,
+        lesson,
+    ) in prepared:
+        by_id[
+            document_id
+        ].append(
+            lesson
+        )
+
+    collisions = {
+        document_id: lessons
+        for (
+            document_id,
+            lessons,
+        ) in by_id.items()
+        if len(lessons) > 1
+    }
+
+    if not collisions:
+        return
+
+    print()
+    print("=" * 70)
+    print("ОШИБКА: ОБНАРУЖЕНЫ КОЛЛИЗИИ ID")
+    print("=" * 70)
+
+    for (
+        document_id,
+        lessons,
+    ) in collisions.items():
+        print()
+        print(
+            f"ID: {document_id}"
+        )
+
+        for lesson in lessons:
+            print(
+                "  "
+                f"{lesson['groupId']} | "
+                f"пара {lesson['number']} | "
+                f"{lesson['time']} | "
+                f"{lesson['subject']} | "
+                f"подгруппа "
+                f"{lesson['subgroup']}"
+            )
+
+    print()
+    print(
+        "Импорт остановлен, потому что "
+        "несколько занятий получили "
+        "одинаковый ID."
+    )
+
+    raise ValueError(
+        "Обнаружены коллизии ID занятий."
     )
 
 
@@ -335,6 +684,33 @@ def analyze_import(
 
     print()
     print(
+        "Проверка структуры занятий..."
+    )
+
+    for index, lesson in enumerate(
+        lessons
+    ):
+        if not isinstance(
+            lesson,
+            dict,
+        ):
+            raise ValueError(
+                "Некорректное занятие "
+                f"#{index + 1}: "
+                "ожидался объект."
+            )
+
+        validate_lesson(
+            lesson,
+            index,
+        )
+
+    print(
+        "Структура занятий корректна."
+    )
+
+    print()
+    print(
         "Загрузка преподавателей "
         "из Firestore..."
     )
@@ -348,21 +724,47 @@ def analyze_import(
         f"{len(teachers)}"
     )
 
-    prepared = []
+    (
+        full_name_index,
+        surname_index,
+    ) = build_teacher_indexes(
+        teachers,
+    )
 
-    matched_names = set()
-    unmatched_names = set()
+    prepared: list[
+        tuple[
+            str,
+            dict[str, Any],
+        ]
+    ] = []
+
+    matched_names: set[str] = set()
+    unresolved_names: set[str] = set()
+
+    ambiguous_names: dict[
+        str,
+        set[str],
+    ] = defaultdict(set)
+
+    lessons_with_teachers = 0
+    lessons_fully_linked = 0
+    lessons_not_linked = 0
+    lessons_without_teachers = 0
 
     for lesson in lessons:
         document_id = make_lesson_id(
             lesson,
         )
 
-        firestore_lesson, unmatched = (
-            prepare_lesson(
-                lesson,
-                teachers,
-            )
+        (
+            firestore_lesson,
+            unresolved,
+            ambiguous,
+            matched,
+        ) = prepare_lesson(
+            lesson,
+            full_name_index,
+            surname_index,
         )
 
         prepared.append(
@@ -372,18 +774,57 @@ def analyze_import(
             )
         )
 
-        for teacher_name in lesson.get(
-            "teachers",
-            [],
-        ):
-            if teacher_name in unmatched:
-                unmatched_names.add(
-                    teacher_name
-                )
+        matched_names.update(
+            matched
+        )
+
+        unresolved_names.update(
+            unresolved
+        )
+
+        for (
+            name,
+            candidates,
+        ) in ambiguous.items():
+            ambiguous_names[
+                name
+            ].update(
+                candidates
+            )
+
+        parsed_teachers = (
+            firestore_lesson[
+                "teachers"
+            ]
+        )
+
+        teacher_ids = (
+            firestore_lesson[
+                "teacherIds"
+            ]
+        )
+
+        if not parsed_teachers:
+            lessons_without_teachers += 1
+        else:
+            lessons_with_teachers += 1
+
+            if (
+                len(teacher_ids)
+                == len(parsed_teachers)
+            ):
+                lessons_fully_linked += 1
             else:
-                matched_names.add(
-                    teacher_name
-                )
+                lessons_not_linked += 1
+
+    check_document_id_collisions(
+        prepared,
+    )
+
+    print()
+    print(
+        "Коллизий ID документов: 0"
+    )
 
     print()
     print("-" * 70)
@@ -391,7 +832,7 @@ def analyze_import(
     print("-" * 70)
 
     print(
-        f"Сопоставлено уникальных имён: "
+        "Сопоставлено уникальных имён: "
         f"{len(matched_names)}"
     )
 
@@ -406,17 +847,68 @@ def analyze_import(
     print()
 
     print(
-        f"Не найдено уникальных имён: "
-        f"{len(unmatched_names)}"
+        "Не найдено в Firestore: "
+        f"{len(unresolved_names)}"
     )
 
-    if unmatched_names:
+    if unresolved_names:
         for name in sorted(
-            unmatched_names
+            unresolved_names
         ):
             print(
                 f"  ! {name}"
             )
+
+    print()
+
+    print(
+        "Неоднозначных имён: "
+        f"{len(ambiguous_names)}"
+    )
+
+    if ambiguous_names:
+        for name in sorted(
+            ambiguous_names
+        ):
+            print(
+                f"  ? {name}"
+            )
+
+            for candidate in sorted(
+                ambiguous_names[name]
+            ):
+                print(
+                    f"      -> {candidate}"
+                )
+
+    print()
+    print("-" * 70)
+    print("СВЯЗЫВАНИЕ ЗАНЯТИЙ")
+    print("-" * 70)
+
+    print(
+        "Занятий с указанными "
+        f"преподавателями: "
+        f"{lessons_with_teachers}"
+    )
+
+    print(
+        "Полностью связанных занятий: "
+        f"{lessons_fully_linked}"
+    )
+
+    print(
+        "Занятий без teacherIds из-за "
+        "неполного/неоднозначного "
+        f"сопоставления: "
+        f"{lessons_not_linked}"
+    )
+
+    print(
+        "Занятий без преподавателя "
+        f"в исходном расписании: "
+        f"{lessons_without_teachers}"
+    )
 
     print()
     print("-" * 70)
@@ -443,22 +935,22 @@ def analyze_import(
         )
 
         print(
-            f"  teachers: "
+            "  teachers: "
             f"{lesson['teachers']}"
         )
 
         print(
-            f"  teacherIds: "
+            "  teacherIds: "
             f"{lesson['teacherIds']}"
         )
 
         print(
-            f"  rooms: "
+            "  rooms: "
             f"{lesson['rooms']}"
         )
 
         print(
-            f"  subgroup: "
+            "  subgroup: "
             f"{lesson['subgroup']}"
         )
 
@@ -472,7 +964,7 @@ def analyze_import(
     )
 
     print(
-        f"Подготовлено документов: "
+        "Подготовлено документов: "
         f"{len(prepared)}"
     )
 
@@ -502,11 +994,11 @@ def commit_import(
         )
         return
 
-    # Firestore batch имеет ограничение
-    # на количество операций.
-    # Используем небольшие партии.
-    batch_size = 400
+    check_document_id_collisions(
+        prepared,
+    )
 
+    batch_size = 400
     written = 0
 
     for start in range(
@@ -529,10 +1021,14 @@ def commit_import(
                 .document(document_id)
             )
 
+            # Полностью заменяем документ.
+            #
+            # Это не оставляет старые поля
+            # после изменения схемы данных.
             batch.set(
                 reference,
                 lesson,
-                merge=True,
+                merge=False,
             )
 
         batch.commit()
@@ -553,7 +1049,7 @@ def commit_import(
     )
 
     print(
-        f"Обработано документов: "
+        "Обработано документов: "
         f"{written}"
     )
 
@@ -563,7 +1059,7 @@ def commit_import(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Импорт расписания "
+            "Безопасный импорт расписания "
             "из JSON в Firestore"
         )
     )
@@ -606,10 +1102,17 @@ def main() -> None:
             "Это был только предварительный "
             "просмотр."
         )
+
         print(
-            "Для реального импорта существует "
+            "Никакие документы Firestore "
+            "не были изменены."
+        )
+
+        print(
+            "Для реальной записи существует "
             "флаг --commit."
         )
+
         return
 
     print()
