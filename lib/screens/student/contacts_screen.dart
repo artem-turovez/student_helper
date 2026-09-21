@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../models/public_profile.dart';
+import '../../models/teacher.dart';
 import '../../services/public_profile_service.dart';
+import '../../services/teacher_service.dart';
 import 'contact_profile_screen.dart';
+import 'teacher_profile_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -19,7 +22,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
   final PublicProfileService _publicProfileService =
       PublicProfileService();
 
+  final TeacherService _teacherService =
+      TeacherService();
+
   List<PublicProfile> _classmates = [];
+  List<Teacher> _teachers = [];
 
   bool _isLoading = true;
   bool _hasError = false;
@@ -29,10 +36,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadClassmates();
+    _loadContacts();
   }
 
-  Future<void> _loadClassmates() async {
+  Future<void> _loadContacts() async {
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -57,6 +64,12 @@ class _ContactsScreenState extends State<ContactsScreen> {
               .doc(user.uid)
               .get();
 
+      if (!userDocument.exists) {
+        throw Exception(
+          'Профиль пользователя не найден',
+        );
+      }
+
       final Map<String, dynamic>? userData =
           userDocument.data();
 
@@ -76,12 +89,19 @@ class _ContactsScreenState extends State<ContactsScreen> {
         currentUserId: user.uid,
       );
 
+      final List<Teacher> teachers =
+          await _teacherService.getTeachersForGroup(
+        groupId,
+      );
+
       if (!mounted) {
         return;
       }
 
       setState(() {
         _classmates = classmates;
+        _teachers = teachers;
+
         _isLoading = false;
         _hasError = false;
       });
@@ -96,13 +116,15 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
       setState(() {
         _classmates = [];
+        _teachers = [];
+
         _isLoading = false;
         _hasError = true;
       });
     }
   }
 
-  void _openProfile(
+  void _openClassmateProfile(
     PublicProfile profile,
   ) {
     Navigator.of(context).push(
@@ -110,6 +132,19 @@ class _ContactsScreenState extends State<ContactsScreen> {
         builder: (context) =>
             ContactProfileScreen(
           profile: profile,
+        ),
+      ),
+    );
+  }
+
+  void _openTeacherProfile(
+    Teacher teacher,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            TeacherProfileScreen(
+          teacher: teacher,
         ),
       ),
     );
@@ -125,7 +160,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: _loadClassmates,
+        onRefresh: _loadContacts,
         color: AppTheme.primaryBlue,
         backgroundColor: AppTheme.card,
         child: ListView(
@@ -170,13 +205,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
   Widget _buildClassmates() {
     if (_isLoading) {
       return const _LoadingCard(
-        key: ValueKey('classmates-loading'),
+        key: ValueKey(
+          'classmates-loading',
+        ),
       );
     }
 
     if (_hasError) {
       return const _MessageCard(
-        key: ValueKey('classmates-error'),
+        key: ValueKey(
+          'classmates-error',
+        ),
         icon: Icons.error_outline,
         text:
             'Не удалось загрузить одногруппников',
@@ -185,7 +224,9 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
     if (_classmates.isEmpty) {
       return const _MessageCard(
-        key: ValueKey('classmates-empty'),
+        key: ValueKey(
+          'classmates-empty',
+        ),
         icon: Icons.group_outlined,
         text:
             'Одногруппники пока не найдены',
@@ -193,7 +234,9 @@ class _ContactsScreenState extends State<ContactsScreen> {
     }
 
     return Column(
-      key: const ValueKey('classmates'),
+      key: const ValueKey(
+        'classmates',
+      ),
       children: _classmates.map(
         (profile) {
           return Padding(
@@ -202,8 +245,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
             ),
             child: _ContactListItem(
               name: profile.name,
+              icon: Icons.person_outline,
               onTap: () =>
-                  _openProfile(profile),
+                  _openClassmateProfile(
+                profile,
+              ),
             ),
           );
         },
@@ -212,11 +258,56 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   Widget _buildTeachers() {
-    return const _MessageCard(
-      key: ValueKey('teachers'),
-      icon: Icons.school_outlined,
-      text:
-          'Преподаватели появятся здесь позже',
+    if (_isLoading) {
+      return const _LoadingCard(
+        key: ValueKey(
+          'teachers-loading',
+        ),
+      );
+    }
+
+    if (_hasError) {
+      return const _MessageCard(
+        key: ValueKey(
+          'teachers-error',
+        ),
+        icon: Icons.error_outline,
+        text:
+            'Не удалось загрузить преподавателей',
+      );
+    }
+
+    if (_teachers.isEmpty) {
+      return const _MessageCard(
+        key: ValueKey(
+          'teachers-empty',
+        ),
+        icon: Icons.school_outlined,
+        text:
+            'Преподаватели для вашей группы пока не найдены',
+      );
+    }
+
+    return Column(
+      key: const ValueKey(
+        'teachers',
+      ),
+      children: _teachers.map(
+        (teacher) {
+          return Padding(
+            padding: const EdgeInsets.only(
+              bottom: 10,
+            ),
+            child: _TeacherListItem(
+              teacher: teacher,
+              onTap: () =>
+                  _openTeacherProfile(
+                teacher,
+              ),
+            ),
+          );
+        },
+      ).toList(),
     );
   }
 }
@@ -339,10 +430,12 @@ class _SwitcherButton extends StatelessWidget {
 
 class _ContactListItem extends StatelessWidget {
   final String name;
+  final IconData icon;
   final VoidCallback onTap;
 
   const _ContactListItem({
     required this.name,
+    required this.icon,
     required this.onTap,
   });
 
@@ -375,8 +468,8 @@ class _ContactListItem extends StatelessWidget {
                     AppTheme.smallRadius,
                   ),
                 ),
-                child: const Icon(
-                  Icons.person_outline,
+                child: Icon(
+                  icon,
                   size: 22,
                   color:
                       AppTheme.primaryBlue,
@@ -403,6 +496,139 @@ class _ContactListItem extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TeacherListItem extends StatelessWidget {
+  final Teacher teacher;
+  final VoidCallback onTap;
+
+  const _TeacherListItem({
+    required this.teacher,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              _TeacherAvatar(
+                teacher: teacher,
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      teacher.name,
+                      style:
+                          AppTheme.cardTitle,
+                    ),
+
+                    if (teacher.department
+                        .trim()
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 4),
+
+                      Text(
+                        teacher.department,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style: AppTheme
+                            .secondaryBodyText,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.chevron_right_rounded,
+                color:
+                    AppTheme.secondaryText,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherAvatar extends StatelessWidget {
+  final Teacher teacher;
+
+  const _TeacherAvatar({
+    required this.teacher,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String? photoUrl =
+        teacher.photoUrl;
+
+    if (photoUrl != null &&
+        photoUrl.trim().isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(
+          AppTheme.smallRadius,
+        ),
+        child: Image.network(
+          photoUrl,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (
+            context,
+            error,
+            stackTrace,
+          ) {
+            return _buildPlaceholder();
+          },
+        ),
+      );
+    }
+
+    return _buildPlaceholder();
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue.withValues(
+          alpha: 0.15,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppTheme.smallRadius,
+        ),
+      ),
+      child: const Icon(
+        Icons.school_outlined,
+        size: 22,
+        color: AppTheme.primaryBlue,
       ),
     );
   }
