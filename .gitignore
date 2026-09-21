@@ -54,3 +54,6 @@ tools/schedule_parser/parsed/
 
 # Firebase Admin credentials
 tools/schedule_parser/service-account.json
+
+# Schedule parser validation reports
+tools/schedule_parser/validator_*.txt
