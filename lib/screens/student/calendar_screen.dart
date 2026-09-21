@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../models/academic_event.dart';
 import '../../models/personal_event.dart';
 import '../../services/academic_event_service.dart';
@@ -16,7 +17,8 @@ class CalendarScreen extends StatefulWidget {
       _CalendarScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class _CalendarScreenState
+    extends State<CalendarScreen> {
   final AcademicEventService _academicEventService =
       AcademicEventService();
 
@@ -107,7 +109,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       final DocumentSnapshot<Map<String, dynamic>>
-          document = await FirebaseFirestore.instance
+          document =
+          await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
@@ -187,7 +190,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       setState(() {
         _academicEvents = academicEvents;
         _personalEvents = personalEvents;
-
         _isLoading = false;
         _hasError = false;
       });
@@ -203,7 +205,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       setState(() {
         _academicEvents = [];
         _personalEvents = [];
-
         _isLoading = false;
         _hasError = true;
       });
@@ -298,7 +299,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
             'Удалить событие?',
           ),
           content: Text(
-            'Событие «${event.title}» будет удалено без возможности восстановления.',
+            'Событие «${event.title}» будет удалено '
+            'без возможности восстановления.',
           ),
           actions: [
             TextButton(
@@ -317,6 +319,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   dialogContext,
                 ).pop(true);
               },
+              style: FilledButton.styleFrom(
+                backgroundColor:
+                    AppTheme.danger,
+                minimumSize:
+                    const Size(0, 44),
+              ),
               child: const Text(
                 'Удалить',
               ),
@@ -487,19 +495,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     final List<DateTime?> days = [];
 
-    for (
-      int i = 0;
-      i < emptyDaysBefore;
-      i++
-    ) {
+    for (int i = 0;
+        i < emptyDaysBefore;
+        i++) {
       days.add(null);
     }
 
-    for (
-      int day = 1;
-      day <= daysInMonth;
-      day++
-    ) {
+    for (int day = 1;
+        day <= daysInMonth;
+        day++) {
       days.add(
         DateTime(
           _visibleMonth.year,
@@ -513,7 +517,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   IconData _getEventIcon(String type) {
-    final String value = type.toLowerCase();
+    final String value =
+        type.toLowerCase();
 
     if (value.contains('лаборатор')) {
       return Icons.science_outlined;
@@ -556,13 +561,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _loadEvents,
+        color: AppTheme.primaryBlue,
+        backgroundColor: AppTheme.card,
         child: SingleChildScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
-            20,
+            AppTheme.screenPadding,
             24,
-            20,
+            AppTheme.screenPadding,
             32,
           ),
           child: Column(
@@ -574,16 +581,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   const Expanded(
                     child: Text(
                       'Календарь',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
+                      style:
+                          AppTheme.pageTitle,
                     ),
                   ),
+
                   IconButton.filled(
                     onPressed:
                         _openCreatePersonalEvent,
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          AppTheme.primaryBlue,
+                      foregroundColor:
+                          Colors.white,
+                    ),
                     icon: const Icon(
                       Icons.add,
                     ),
@@ -593,233 +604,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ],
               ),
 
-              const SizedBox(height: 6),
-
-              const Text(
-                'Учебные и личные события',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFFB6C5E0),
-                ),
-              ),
-
               const SizedBox(height: 24),
 
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color:
-                      const Color(0xFF10213D),
-                  borderRadius:
-                      BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed:
-                              _previousMonth,
-                          icon: const Icon(
-                            Icons.chevron_left,
-                          ),
-                        ),
-
-                        Expanded(
-                          child: Text(
-                            '${_monthNames[_visibleMonth.month - 1]} '
-                            '${_visibleMonth.year}',
-                            textAlign:
-                                TextAlign.center,
-                            style:
-                                const TextStyle(
-                              fontSize: 19,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                        ),
-
-                        IconButton(
-                          onPressed:
-                              _nextMonth,
-                          icon: const Icon(
-                            Icons.chevron_right,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    Row(
-                      children: _weekdays.map(
-                        (weekday) {
-                          return Expanded(
-                            child: Center(
-                              child: Text(
-                                weekday,
-                                style:
-                                    const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(
-                                    0xFFB6C5E0,
-                                  ),
-                                  fontWeight:
-                                      FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ).toList(),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics:
-                          const NeverScrollableScrollPhysics(),
-                      itemCount:
-                          calendarDays.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 7,
-                        mainAxisSpacing: 6,
-                        crossAxisSpacing: 4,
-                      ),
-                      itemBuilder:
-                          (context, index) {
-                        final DateTime? day =
-                            calendarDays[index];
-
-                        if (day == null) {
-                          return const SizedBox();
-                        }
-
-                        final bool isSelected =
-                            _isSameDay(
-                          day,
-                          _selectedDate,
-                        );
-
-                        final bool isToday =
-                            _isSameDay(
-                          day,
-                          DateTime.now(),
-                        );
-
-                        final bool
-                            hasAcademicEvents =
-                            _hasAcademicEventsOnDay(
-                          day,
-                        );
-
-                        final bool
-                            hasPersonalEvents =
-                            _hasPersonalEventsOnDay(
-                          day,
-                        );
-
-                        return InkWell(
-                          borderRadius:
-                              BorderRadius.circular(
-                            12,
-                          ),
-                          onTap: () {
-                            setState(() {
-                              _selectedDate =
-                                  day;
-                            });
-                          },
-                          child: Container(
-                            decoration:
-                                BoxDecoration(
-                              color: isSelected
-                                  ? const Color(
-                                      0xFF2B7FFF,
-                                    )
-                                  : Colors
-                                      .transparent,
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(12),
-                              border: isToday &&
-                                      !isSelected
-                                  ? Border.all(
-                                      color:
-                                          const Color(
-                                        0xFF2B7FFF,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            child: Stack(
-                              alignment:
-                                  Alignment.center,
-                              children: [
-                                Text(
-                                  '${day.day}',
-                                  style:
-                                      TextStyle(
-                                    fontSize: 14,
-                                    fontWeight:
-                                        isSelected ||
-                                                isToday
-                                            ? FontWeight
-                                                .bold
-                                            : FontWeight
-                                                .normal,
-                                    color:
-                                        isSelected
-                                            ? Colors
-                                                .white
-                                            : null,
-                                  ),
-                                ),
-
-                                if (hasAcademicEvents ||
-                                    hasPersonalEvents)
-                                  Positioned(
-                                    bottom: 3,
-                                    child: Row(
-                                      mainAxisSize:
-                                          MainAxisSize
-                                              .min,
-                                      children: [
-                                        if (hasAcademicEvents)
-                                          _EventDot(
-                                            isSelected:
-                                                isSelected,
-                                            isPersonal:
-                                                false,
-                                          ),
-
-                                        if (hasAcademicEvents &&
-                                            hasPersonalEvents)
-                                          const SizedBox(
-                                            width: 3,
-                                          ),
-
-                                        if (hasPersonalEvents)
-                                          _EventDot(
-                                            isSelected:
-                                                isSelected,
-                                            isPersonal:
-                                                true,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+              _CalendarCard(
+                visibleMonth: _visibleMonth,
+                selectedDate: _selectedDate,
+                calendarDays: calendarDays,
+                monthName:
+                    _monthNames[
+                      _visibleMonth.month - 1
+                    ],
+                weekdays: _weekdays,
+                onPrevious:
+                    _previousMonth,
+                onNext: _nextMonth,
+                isSameDay: _isSameDay,
+                hasAcademicEvents:
+                    _hasAcademicEventsOnDay,
+                hasPersonalEvents:
+                    _hasPersonalEventsOnDay,
+                onSelectDate: (date) {
+                  setState(() {
+                    _selectedDate = date;
+                  });
+                },
               ),
 
               const SizedBox(height: 28),
@@ -827,19 +635,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
               Text(
                 'События на ${_selectedDate.day} '
                 '${_monthNamesGenitive[_selectedDate.month - 1]}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style:
+                    AppTheme.sectionTitle,
               ),
 
               const SizedBox(height: 14),
 
               if (_isLoading)
-                const Center(
-                  child: Padding(
-                    padding:
-                        EdgeInsets.all(24),
+                const Padding(
+                  padding:
+                      EdgeInsets.all(28),
+                  child: Center(
                     child:
                         CircularProgressIndicator(),
                   ),
@@ -847,6 +653,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               else if (_hasError)
                 const _CalendarMessageCard(
                   icon: Icons.error_outline,
+                  iconColor:
+                      AppTheme.danger,
                   title:
                       'Не удалось загрузить события',
                   description:
@@ -856,24 +664,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 const _CalendarMessageCard(
                   icon:
                       Icons.event_note_outlined,
+                  iconColor:
+                      AppTheme.primaryBlue,
                   title:
                       'Событий пока нет',
                   description:
                       'На выбранную дату ничего не запланировано.',
                 )
               else ...[
-                if (academicEvents.isNotEmpty) ...[
-                  const _SectionTitle(
+                if (academicEvents
+                    .isNotEmpty) ...[
+                  const _EventSectionTitle(
                     title:
                         'Учебные события',
+                    color:
+                        AppTheme.primaryBlue,
                   ),
+
                   const SizedBox(height: 10),
 
                   ...academicEvents.map(
                     (event) => Padding(
                       padding:
                           const EdgeInsets.only(
-                        bottom: 12,
+                        bottom: 10,
                       ),
                       child:
                           _AcademicEventCard(
@@ -886,13 +700,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ),
                 ],
 
-                if (personalEvents.isNotEmpty) ...[
-                  if (academicEvents.isNotEmpty)
-                    const SizedBox(height: 10),
+                if (personalEvents
+                    .isNotEmpty) ...[
+                  if (academicEvents
+                      .isNotEmpty)
+                    const SizedBox(
+                      height: 14,
+                    ),
 
-                  const _SectionTitle(
+                  const _EventSectionTitle(
                     title:
                         'Личные события',
+                    color: AppTheme
+                        .personalEvent,
                   ),
 
                   const SizedBox(height: 10),
@@ -901,7 +721,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     (event) => Padding(
                       padding:
                           const EdgeInsets.only(
-                        bottom: 12,
+                        bottom: 10,
                       ),
                       child:
                           _PersonalEventCard(
@@ -931,6 +751,274 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 }
 
+class _CalendarCard extends StatelessWidget {
+  final DateTime visibleMonth;
+  final DateTime selectedDate;
+  final List<DateTime?> calendarDays;
+  final String monthName;
+  final List<String> weekdays;
+
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  final bool Function(
+    DateTime,
+    DateTime,
+  ) isSameDay;
+
+  final bool Function(DateTime)
+      hasAcademicEvents;
+
+  final bool Function(DateTime)
+      hasPersonalEvents;
+
+  final ValueChanged<DateTime>
+      onSelectDate;
+
+  const _CalendarCard({
+    required this.visibleMonth,
+    required this.selectedDate,
+    required this.calendarDays,
+    required this.monthName,
+    required this.weekdays,
+    required this.onPrevious,
+    required this.onNext,
+    required this.isSameDay,
+    required this.hasAcademicEvents,
+    required this.hasPersonalEvents,
+    required this.onSelectDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _MonthArrow(
+                icon:
+                    Icons.chevron_left_rounded,
+                onPressed: onPrevious,
+              ),
+
+              Expanded(
+                child: Text(
+                  '$monthName '
+                  '${visibleMonth.year}',
+                  textAlign:
+                      TextAlign.center,
+                  style:
+                      AppTheme.sectionTitle,
+                ),
+              ),
+
+              _MonthArrow(
+                icon:
+                    Icons.chevron_right_rounded,
+                onPressed: onNext,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          Row(
+            children: weekdays.map(
+              (weekday) {
+                return Expanded(
+                  child: Center(
+                    child: Text(
+                      weekday,
+                      style:
+                          AppTheme.labelText
+                              .copyWith(
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ).toList(),
+          ),
+
+          const SizedBox(height: 10),
+
+          GridView.builder(
+            shrinkWrap: true,
+            physics:
+                const NeverScrollableScrollPhysics(),
+            itemCount:
+                calendarDays.length,
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 4,
+            ),
+            itemBuilder:
+                (context, index) {
+              final DateTime? day =
+                  calendarDays[index];
+
+              if (day == null) {
+                return const SizedBox();
+              }
+
+              final bool selected =
+                  isSameDay(
+                day,
+                selectedDate,
+              );
+
+              final bool today =
+                  isSameDay(
+                day,
+                DateTime.now(),
+              );
+
+              final bool academic =
+                  hasAcademicEvents(day);
+
+              final bool personal =
+                  hasPersonalEvents(day);
+
+              return Material(
+                color: Colors.transparent,
+                borderRadius:
+                    BorderRadius.circular(
+                  AppTheme.smallRadius,
+                ),
+                child: InkWell(
+                  onTap: () =>
+                      onSelectDate(day),
+                  borderRadius:
+                      BorderRadius.circular(
+                    AppTheme.smallRadius,
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppTheme
+                              .primaryBlue
+                          : Colors
+                              .transparent,
+                      borderRadius:
+                          BorderRadius.circular(
+                        AppTheme
+                            .smallRadius,
+                      ),
+                      border:
+                          today && !selected
+                              ? Border.all(
+                                  color: AppTheme
+                                      .primaryBlue,
+                                )
+                              : null,
+                    ),
+                    child: Stack(
+                      alignment:
+                          Alignment.center,
+                      children: [
+                        Text(
+                          '${day.day}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                selected ||
+                                        today
+                                    ? FontWeight
+                                        .bold
+                                    : FontWeight
+                                        .normal,
+                            color: selected
+                                ? Colors.white
+                                : AppTheme
+                                    .primaryText,
+                          ),
+                        ),
+
+                        if (academic ||
+                            personal)
+                          Positioned(
+                            bottom: 3,
+                            child: Row(
+                              mainAxisSize:
+                                  MainAxisSize
+                                      .min,
+                              children: [
+                                if (academic)
+                                  _EventDot(
+                                    isSelected:
+                                        selected,
+                                    isPersonal:
+                                        false,
+                                  ),
+
+                                if (academic &&
+                                    personal)
+                                  const SizedBox(
+                                    width: 3,
+                                  ),
+
+                                if (personal)
+                                  _EventDot(
+                                    isSelected:
+                                        selected,
+                                    isPersonal:
+                                        true,
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MonthArrow extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _MonthArrow({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor:
+            AppTheme.primaryBlue
+                .withValues(
+          alpha: 0.12,
+        ),
+        foregroundColor:
+            AppTheme.primaryBlue,
+      ),
+      icon: Icon(icon),
+    );
+  }
+}
+
 class _EventDot extends StatelessWidget {
   final bool isSelected;
   final bool isPersonal;
@@ -949,30 +1037,45 @@ class _EventDot extends StatelessWidget {
         color: isSelected
             ? Colors.white
             : isPersonal
-                ? const Color(0xFFB18CFF)
-                : const Color(0xFF2B7FFF),
+                ? AppTheme
+                    .personalEvent
+                : AppTheme
+                    .primaryBlue,
         shape: BoxShape.circle,
       ),
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
+class _EventSectionTitle
+    extends StatelessWidget {
   final String title;
+  final Color color;
 
-  const _SectionTitle({
+  const _EventSectionTitle({
     required this.title,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        color: Color(0xFFB6C5E0),
-        fontWeight: FontWeight.w600,
-      ),
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style:
+              AppTheme.cardTitle,
+        ),
+      ],
     );
   }
 }
@@ -991,32 +1094,24 @@ class _AcademicEventCard
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2B7FFF)
-                  .withValues(alpha: 0.15),
-              borderRadius:
-                  BorderRadius.circular(14),
-            ),
-            child: Icon(
-              icon,
-              color:
-                  const Color(0xFF2B7FFF),
-            ),
+          _EventIconBox(
+            icon: icon,
+            color:
+                AppTheme.primaryBlue,
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
 
           Expanded(
             child: Column(
@@ -1026,38 +1121,30 @@ class _AcademicEventCard
                 Text(
                   event.type,
                   style: const TextStyle(
-                    color:
-                        Color(0xFF2B7FFF),
-                    fontSize: 13,
+                    color: AppTheme
+                        .primaryBlue,
+                    fontSize: 12,
                     fontWeight:
                         FontWeight.w600,
                   ),
                 ),
 
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
 
                 Text(
                   event.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight:
-                        FontWeight.w600,
-                    height: 1.3,
-                  ),
+                  style:
+                      AppTheme.cardTitle,
                 ),
 
                 if (event.description
                     .trim()
                     .isNotEmpty) ...[
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                   Text(
                     event.description,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.4,
-                      color:
-                          Color(0xFFB6C5E0),
-                    ),
+                    style: AppTheme
+                        .secondaryBodyText,
                   ),
                 ],
               ],
@@ -1085,12 +1172,19 @@ class _PersonalEventCard
 
   @override
   Widget build(BuildContext context) {
+    final Color eventColor =
+        event.isCompleted
+            ? AppTheme.success
+            : AppTheme.personalEvent;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Row(
         crossAxisAlignment:
@@ -1100,26 +1194,31 @@ class _PersonalEventCard
             onTap: onToggle,
             borderRadius:
                 BorderRadius.circular(50),
-            child: Padding(
-              padding: const EdgeInsets.all(2),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: eventColor
+                    .withValues(
+                  alpha: 0.12,
+                ),
+                borderRadius:
+                    BorderRadius.circular(
+                  AppTheme.smallRadius,
+                ),
+              ),
               child: Icon(
                 event.isCompleted
-                    ? Icons.check_circle
+                    ? Icons.check_rounded
                     : Icons
-                        .radio_button_unchecked,
-                size: 28,
-                color: event.isCompleted
-                    ? const Color(
-                        0xFF63D6A3,
-                      )
-                    : const Color(
-                        0xFFB18CFF,
-                      ),
+                        .event_note_outlined,
+                color: eventColor,
+                size: 22,
               ),
             ),
           ),
 
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
 
           Expanded(
             child: Column(
@@ -1131,33 +1230,26 @@ class _PersonalEventCard
                       ? 'Выполнено'
                       : 'Личное событие',
                   style: TextStyle(
-                    color: event.isCompleted
-                        ? const Color(
-                            0xFF63D6A3,
-                          )
-                        : const Color(
-                            0xFFB18CFF,
-                          ),
-                    fontSize: 13,
+                    color: eventColor,
+                    fontSize: 12,
                     fontWeight:
                         FontWeight.w600,
                   ),
                 ),
 
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
 
                 Text(
                   event.title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight:
-                        FontWeight.w600,
-                    height: 1.3,
-                    color: event.isCompleted
-                        ? const Color(
-                            0xFF8291AA,
-                          )
-                        : Colors.white,
+                  style:
+                      AppTheme.cardTitle
+                          .copyWith(
+                    color: event
+                            .isCompleted
+                        ? AppTheme
+                            .secondaryText
+                        : AppTheme
+                            .primaryText,
                     decoration:
                         event.isCompleted
                             ? TextDecoration
@@ -1169,19 +1261,17 @@ class _PersonalEventCard
                 if (event.description
                     .trim()
                     .isNotEmpty) ...[
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                   Text(
                     event.description,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.4,
-                      color: event.isCompleted
-                          ? const Color(
-                              0xFF718097,
-                            )
-                          : const Color(
-                              0xFFB6C5E0,
-                            ),
+                    style: AppTheme
+                        .secondaryBodyText
+                        .copyWith(
+                      decoration:
+                          event.isCompleted
+                              ? TextDecoration
+                                  .lineThrough
+                              : null,
                     ),
                   ),
                 ],
@@ -1191,6 +1281,11 @@ class _PersonalEventCard
 
           PopupMenuButton<String>(
             tooltip: 'Действия',
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color:
+                  AppTheme.secondaryText,
+            ),
             onSelected: (value) {
               if (value == 'edit') {
                 onEdit();
@@ -1221,10 +1316,16 @@ class _PersonalEventCard
                   children: [
                     Icon(
                       Icons.delete_outline,
+                      color:
+                          AppTheme.danger,
                     ),
                     SizedBox(width: 10),
                     Text(
                       'Удалить',
+                      style: TextStyle(
+                        color:
+                            AppTheme.danger,
+                      ),
                     ),
                   ],
                 ),
@@ -1237,14 +1338,47 @@ class _PersonalEventCard
   }
 }
 
+class _EventIconBox extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const _EventIconBox({
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: color.withValues(
+          alpha: 0.15,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppTheme.smallRadius,
+        ),
+      ),
+      child: Icon(
+        icon,
+        color: color,
+        size: 22,
+      ),
+    );
+  }
+}
+
 class _CalendarMessageCard
     extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
   final String title;
   final String description;
 
   const _CalendarMessageCard({
     required this.icon,
+    required this.iconColor,
     required this.title,
     required this.description,
   });
@@ -1253,37 +1387,41 @@ class _CalendarMessageCard
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 22,
+        vertical: 26,
+      ),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            size: 40,
-            color:
-                const Color(0xFF2B7FFF),
+          _EventIconBox(
+            icon: icon,
+            color: iconColor,
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
           Text(
             title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-            ),
+            textAlign:
+                TextAlign.center,
+            style:
+                AppTheme.cardTitle,
           ),
+
           const SizedBox(height: 6),
+
           Text(
             description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              color: Color(0xFFB6C5E0),
-            ),
+            textAlign:
+                TextAlign.center,
+            style: AppTheme
+                .secondaryBodyText,
           ),
         ],
       ),

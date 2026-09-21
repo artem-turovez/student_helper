@@ -3,16 +3,22 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/brand.dart';
+import '../../app/theme.dart';
 import '../student/student_home_screen.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
-  const VerifyEmailScreen({super.key});
+  const VerifyEmailScreen({
+    super.key,
+  });
 
   @override
-  State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
+  State<VerifyEmailScreen> createState() =>
+      _VerifyEmailScreenState();
 }
 
-class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
+class _VerifyEmailScreenState
+    extends State<VerifyEmailScreen> {
   Timer? timer;
 
   bool isChecking = false;
@@ -44,7 +50,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     isChecking = true;
 
     try {
-      final User? user = FirebaseAuth.instance.currentUser;
+      final User? user =
+          FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
@@ -52,14 +59,16 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
       await user.reload();
 
-      final User? refreshedUser = FirebaseAuth.instance.currentUser;
+      final User? refreshedUser =
+          FirebaseAuth.instance.currentUser;
 
       if (refreshedUser == null) {
         return;
       }
 
       debugPrint(
-        'Статус подтверждения Email: ${refreshedUser.emailVerified}',
+        'Статус подтверждения Email: '
+        '${refreshedUser.emailVerified}',
       );
 
       if (refreshedUser.emailVerified) {
@@ -74,20 +83,21 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
             content: Text(
               'Email успешно подтверждён',
             ),
-            behavior: SnackBarBehavior.floating,
           ),
         );
 
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
-            builder: (context) => const StudentHomeScreen(),
+            builder: (context) =>
+                const StudentHomeScreen(),
           ),
           (route) => false,
         );
       }
     } on FirebaseAuthException catch (e) {
       debugPrint(
-        'Ошибка проверки Email: ${e.code} - ${e.message}',
+        'Ошибка проверки Email: '
+        '${e.code} - ${e.message}',
       );
     } catch (e) {
       debugPrint(
@@ -108,7 +118,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     });
 
     try {
-      final User? user = FirebaseAuth.instance.currentUser;
+      final User? user =
+          FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
@@ -117,7 +128,8 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       await user.sendEmailVerification();
 
       debugPrint(
-        'Письмо подтверждения отправлено повторно',
+        'Письмо подтверждения '
+        'отправлено повторно',
       );
 
       if (!mounted) {
@@ -129,12 +141,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           content: Text(
             'Письмо отправлено повторно',
           ),
-          behavior: SnackBarBehavior.floating,
         ),
       );
     } on FirebaseAuthException catch (e) {
       debugPrint(
-        'Ошибка повторной отправки: ${e.code} - ${e.message}',
+        'Ошибка повторной отправки: '
+        '${e.code} - ${e.message}',
       );
 
       String message;
@@ -142,17 +154,20 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       switch (e.code) {
         case 'too-many-requests':
           message =
-              'Слишком много запросов. Попробуйте немного позже';
+              'Слишком много запросов. '
+              'Попробуйте немного позже';
           break;
 
         case 'network-request-failed':
           message =
-              'Не удалось подключиться к серверу. Проверьте интернет';
+              'Не удалось подключиться к '
+              'серверу. Проверьте интернет';
           break;
 
         default:
           message =
-              'Не удалось отправить письмо. Ошибка: ${e.code}';
+              'Не удалось отправить письмо. '
+              'Ошибка: ${e.code}';
       }
 
       if (!mounted) {
@@ -162,12 +177,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
       debugPrint(
-        'Неизвестная ошибка повторной отправки: $e',
+        'Неизвестная ошибка повторной '
+        'отправки: $e',
       );
 
       if (!mounted) {
@@ -179,7 +194,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           content: Text(
             'Произошла неизвестная ошибка',
           ),
-          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -207,96 +221,196 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final User? user = FirebaseAuth.instance.currentUser;
+    final User? user =
+        FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF07142B),
-        surfaceTintColor: Colors.transparent,
         title: const Text(
-          'Подтверждение Email',
+          'Подтверждение почты',
         ),
-        centerTitle: true,
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 32,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.screenPadding,
+            28,
+            AppTheme.screenPadding,
+            32,
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Spacer(),
-
-              const Icon(
-                Icons.mark_email_unread_outlined,
-                size: 90,
-                color: Color(0xFF2B7FFF),
+              Image.asset(
+                AppBrand.logoPath,
+                width: 90,
+                height: 66,
+                fit: BoxFit.contain,
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              const Text(
-                'Подтвердите почту',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(
+                    alpha: 0.15,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    20,
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              const Text(
-                'Мы отправили письмо с подтверждением на:',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFFB6C5E0),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Text(
-                user?.email ?? '',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
+                child: const Icon(
+                  Icons.mark_email_unread_outlined,
+                  size: 34,
+                  color: AppTheme.primaryBlue,
                 ),
               ),
 
               const SizedBox(height: 24),
 
               const Text(
-                'Откройте письмо и перейдите по ссылке подтверждения. '
-                'После этого приложение автоматически проверит статус '
-                'и откроет главную страницу.',
+                'Подтвердите почту',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFFB6C5E0),
-                  height: 1.5,
-                ),
+                style: AppTheme.pageTitle,
               ),
 
-              const SizedBox(height: 32),
-
-              const CircularProgressIndicator(),
-
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               const Text(
-                'Ожидаем подтверждение...',
-                style: TextStyle(
-                  color: Color(0xFFB6C5E0),
+                'Мы отправили письмо с '
+                'подтверждением для доступа '
+                'к Помощнику учащегося МРК.',
+                textAlign: TextAlign.center,
+                style: AppTheme.secondaryBodyText,
+              ),
+
+              const SizedBox(height: 22),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(
+                  16,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.cardRadius,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue
+                            .withValues(
+                          alpha: 0.15,
+                        ),
+                        borderRadius:
+                            BorderRadius.circular(
+                          AppTheme.smallRadius,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.email_outlined,
+                        color: AppTheme.primaryBlue,
+                        size: 22,
+                      ),
+                    ),
+
+                    const SizedBox(width: 14),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Письмо отправлено на',
+                            style: AppTheme.labelText,
+                          ),
+
+                          const SizedBox(height: 3),
+
+                          Text(
+                            user?.email ??
+                                'Email не указан',
+                            style: AppTheme.cardTitle,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 22),
+
+              const Text(
+                'Откройте письмо и перейдите '
+                'по ссылке подтверждения. '
+                'Приложение автоматически '
+                'проверит статус.',
+                textAlign: TextAlign.center,
+                style: AppTheme.secondaryBodyText,
+              ),
+
+              const SizedBox(height: 28),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(
+                  18,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.cardRadius,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                      ),
+                    ),
+
+                    SizedBox(width: 14),
+
+                    Text(
+                      'Ожидаем подтверждение...',
+                      style:
+                          AppTheme.secondaryBodyText,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed:
+                      checkEmailVerification,
+                  icon: const Icon(
+                    Icons.refresh,
+                  ),
+                  label: const Text(
+                    'Я подтвердил почту',
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               SizedBox(
                 width: double.infinity,
@@ -305,11 +419,25 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   onPressed: isSending
                       ? null
                       : resendVerificationEmail,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor:
+                        AppTheme.primaryBlue,
+                    side: const BorderSide(
+                      color: AppTheme.primaryBlue,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        AppTheme.cardRadius,
+                      ),
+                    ),
+                  ),
                   child: isSending
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(
+                          child:
+                              CircularProgressIndicator(
                             strokeWidth: 2,
                           ),
                         )
@@ -319,11 +447,15 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
 
-              TextButton(
+              TextButton.icon(
                 onPressed: logout,
-                child: const Text(
+                icon: const Icon(
+                  Icons.logout,
+                  size: 18,
+                ),
+                label: const Text(
                   'Выйти из аккаунта',
                 ),
               ),

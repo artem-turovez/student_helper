@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../models/academic_event.dart';
 import '../../models/lesson.dart';
 import '../../services/academic_event_service.dart';
@@ -131,7 +132,9 @@ class _LessonDetailsScreenState
   }
 
   String getEventDate(DateTime eventDate) {
-    final String day = eventDate.day.toString().padLeft(2, '0');
+    final String day =
+        eventDate.day.toString().padLeft(2, '0');
+
     final String month =
         eventDate.month.toString().padLeft(2, '0');
 
@@ -141,7 +144,8 @@ class _LessonDetailsScreenState
   String getSubgroup() {
     final String? subgroup = lesson.subgroup;
 
-    if (subgroup == null || subgroup.trim().isEmpty) {
+    if (subgroup == null ||
+        subgroup.trim().isEmpty) {
       return 'Вся группа';
     }
 
@@ -151,7 +155,8 @@ class _LessonDetailsScreenState
   String getGroup() {
     final String? groupId = lesson.groupId;
 
-    if (groupId == null || groupId.trim().isEmpty) {
+    if (groupId == null ||
+        groupId.trim().isEmpty) {
       return 'Группа не указана';
     }
 
@@ -159,13 +164,18 @@ class _LessonDetailsScreenState
   }
 
   IconData getEventIcon(String type) {
-    final String normalizedType = type.toLowerCase();
+    final String normalizedType =
+        type.toLowerCase();
 
-    if (normalizedType.contains('лаборатор')) {
+    if (normalizedType.contains(
+      'лаборатор',
+    )) {
       return Icons.science_outlined;
     }
 
-    if (normalizedType.contains('контроль')) {
+    if (normalizedType.contains(
+      'контроль',
+    )) {
       return Icons.assignment_outlined;
     }
 
@@ -173,7 +183,9 @@ class _LessonDetailsScreenState
       return Icons.quiz_outlined;
     }
 
-    if (normalizedType.contains('экзамен')) {
+    if (normalizedType.contains(
+      'экзамен',
+    )) {
       return Icons.school_outlined;
     }
 
@@ -188,7 +200,7 @@ class _LessonDetailsScreenState
     if (_isLoadingEvents) {
       return const Padding(
         padding: EdgeInsets.symmetric(
-          vertical: 24,
+          vertical: 28,
         ),
         child: Center(
           child: CircularProgressIndicator(),
@@ -197,84 +209,33 @@ class _LessonDetailsScreenState
     }
 
     if (_hasEventsError) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF10213D),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 42,
-              color: Color(0xFFB6C5E0),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Не удалось загрузить события',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _isLoadingEvents = true;
-                  _hasEventsError = false;
-                });
+      return _StateCard(
+        icon: Icons.error_outline,
+        iconColor: AppTheme.danger,
+        title: 'Не удалось загрузить события',
+        description:
+            'Проверьте подключение и повторите попытку.',
+        buttonText: 'Повторить',
+        onPressed: () {
+          setState(() {
+            _isLoadingEvents = true;
+            _hasEventsError = false;
+          });
 
-                _loadAcademicEvents();
-              },
-              child: const Text(
-                'Повторить',
-              ),
-            ),
-          ],
-        ),
+          _loadAcademicEvents();
+        },
       );
     }
 
     if (_events.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF10213D),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: const Column(
-          children: [
-            Icon(
-              Icons.event_note_outlined,
-              size: 42,
-              color: Color(0xFF2B7FFF),
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Событий пока нет',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            SizedBox(height: 6),
-            Text(
-              'Контрольные, лабораторные, тесты '
-              'и другие учебные события будут '
-              'отображаться здесь.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.4,
-                color: Color(0xFFB6C5E0),
-              ),
-            ),
-          ],
-        ),
+      return const _StateCard(
+        icon: Icons.event_note_outlined,
+        iconColor: AppTheme.primaryBlue,
+        title: 'Событий пока нет',
+        description:
+            'Контрольные, лабораторные, тесты '
+            'и другие учебные события будут '
+            'отображаться здесь.',
       );
     }
 
@@ -283,12 +244,13 @@ class _LessonDetailsScreenState
         (event) {
           return Padding(
             padding: const EdgeInsets.only(
-              bottom: 12,
+              bottom: 10,
             ),
             child: AcademicEventCard(
               event: event,
               icon: getEventIcon(event.type),
-              formattedDate: getEventDate(event.date),
+              formattedDate:
+                  getEventDate(event.date),
             ),
           );
         },
@@ -307,13 +269,15 @@ class _LessonDetailsScreenState
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadAcademicEvents,
+          color: AppTheme.primaryBlue,
+          backgroundColor: AppTheme.card,
           child: SingleChildScrollView(
             physics:
                 const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(
-              24,
-              12,
-              24,
+              AppTheme.screenPadding,
+              16,
+              AppTheme.screenPadding,
               32,
             ),
             child: Column(
@@ -322,75 +286,64 @@ class _LessonDetailsScreenState
               children: [
                 Text(
                   lesson.subject,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+                  style: AppTheme.pageTitle.copyWith(
                     height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2B7FFF)
-                        .withValues(
-                      alpha: 0.12,
-                    ),
-                    borderRadius:
-                        BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    lesson.type,
-                    style: const TextStyle(
-                      color: Color(0xFF2B7FFF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+
+                const SizedBox(height: 12),
+
+                _TypeBadge(
+                  text: lesson.type,
                 ),
-                const SizedBox(height: 28),
-                const Text(
-                  'Основная информация',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+
+                const SizedBox(height: 30),
+
+                const _SectionTitle(
+                  title: 'Основная информация',
                 ),
-                const SizedBox(height: 14),
+
+                const SizedBox(height: 12),
+
                 LessonInfoTile(
-                  icon: Icons.calendar_today_outlined,
+                  icon:
+                      Icons.calendar_today_outlined,
                   title: 'Дата',
                   value: getFormattedDate(),
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 10),
+
                 LessonInfoTile(
-                  icon: Icons.format_list_numbered,
+                  icon:
+                      Icons.format_list_numbered,
                   title: 'Номер пары',
                   value: '${lesson.number} пара',
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 10),
+
                 LessonInfoTile(
-                  icon: Icons.access_time_outlined,
+                  icon:
+                      Icons.access_time_outlined,
                   title: 'Время',
                   value: lesson.time,
                 ),
+
                 const SizedBox(height: 28),
-                const Text(
-                  'Преподаватели',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+
+                const _SectionTitle(
+                  title: 'Преподаватели',
                 ),
-                const SizedBox(height: 14),
+
+                const SizedBox(height: 12),
+
                 ...lesson.teachers.map(
                   (teacher) {
                     return Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: 12,
+                      padding:
+                          const EdgeInsets.only(
+                        bottom: 10,
                       ),
                       child: TeacherCard(
                         teacher: teacher,
@@ -398,69 +351,78 @@ class _LessonDetailsScreenState
                     );
                   },
                 ),
+
                 if (lesson.teachers.isEmpty)
                   const EmptyInfoCard(
-                    text: 'Преподаватель не указан',
+                    icon:
+                        Icons.person_off_outlined,
+                    text:
+                        'Преподаватель не указан',
                   ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Аудитории',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+
+                const SizedBox(height: 28),
+
+                const _SectionTitle(
+                  title: 'Аудитории',
                 ),
-                const SizedBox(height: 14),
+
+                const SizedBox(height: 12),
+
                 ...lesson.rooms.map(
                   (room) {
                     return Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: 12,
+                      padding:
+                          const EdgeInsets.only(
+                        bottom: 10,
                       ),
                       child: LessonInfoTile(
-                        icon:
-                            Icons.meeting_room_outlined,
+                        icon: Icons
+                            .meeting_room_outlined,
                         title: 'Аудитория',
                         value: room,
                       ),
                     );
                   },
                 ),
+
                 if (lesson.rooms.isEmpty)
                   const EmptyInfoCard(
-                    text: 'Аудитория не указана',
+                    icon:
+                        Icons.meeting_room_outlined,
+                    text:
+                        'Аудитория не указана',
                   ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Учебная группа',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+
+                const SizedBox(height: 28),
+
+                const _SectionTitle(
+                  title: 'Учебная группа',
                 ),
-                const SizedBox(height: 14),
+
+                const SizedBox(height: 12),
+
                 LessonInfoTile(
                   icon: Icons.groups_outlined,
                   title: 'Группа',
                   value: getGroup(),
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 10),
+
                 LessonInfoTile(
-                  icon: Icons.group_work_outlined,
+                  icon:
+                      Icons.group_work_outlined,
                   title: 'Подгруппа',
                   value: getSubgroup(),
                 ),
+
                 const SizedBox(height: 28),
 
-                const Text(
-                  'Учебные события',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                const _SectionTitle(
+                  title: 'Учебные события',
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
                 _buildAcademicEvents(),
 
@@ -468,22 +430,21 @@ class _LessonDetailsScreenState
 
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
                   child: FilledButton.icon(
                     onPressed: () {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(
                         const SnackBar(
                           content: Text(
                             'Создание напоминаний добавим позже',
                           ),
-                          behavior:
-                              SnackBarBehavior.floating,
                         ),
                       );
                     },
                     icon: const Icon(
-                      Icons.notifications_active_outlined,
+                      Icons
+                          .notifications_active_outlined,
                     ),
                     label: const Text(
                       'Создать напоминание',
@@ -499,7 +460,59 @@ class _LessonDetailsScreenState
   }
 }
 
-class AcademicEventCard extends StatelessWidget {
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle({
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: AppTheme.sectionTitle,
+    );
+  }
+}
+
+class _TypeBadge extends StatelessWidget {
+  final String text;
+
+  const _TypeBadge({
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue
+            .withValues(
+          alpha: 0.12,
+        ),
+        borderRadius: BorderRadius.circular(
+          10,
+        ),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppTheme.primaryBlue,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class AcademicEventCard
+    extends StatelessWidget {
   final AcademicEvent event;
   final IconData icon;
   final String formattedDate;
@@ -515,30 +528,23 @@ class AcademicEventCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2B7FFF)
-                  .withValues(
-                alpha: 0.15,
-              ),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF2B7FFF),
-            ),
+          _BlueIconBox(
+            icon: icon,
           ),
-          const SizedBox(width: 16),
+
+          const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -547,46 +553,50 @@ class AcademicEventCard extends StatelessWidget {
                 Text(
                   event.type,
                   style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF2B7FFF),
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color:
+                        AppTheme.primaryBlue,
+                    fontWeight:
+                        FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 5),
+
+                const SizedBox(height: 4),
+
                 Text(
                   event.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
+                  style: AppTheme.cardTitle,
                 ),
-                if (event.description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 7),
+
+                if (event.description
+                    .trim()
+                    .isNotEmpty) ...[
+                  const SizedBox(height: 6),
                   Text(
                     event.description,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.4,
-                      color: Color(0xFFB6C5E0),
-                    ),
+                    style: AppTheme
+                        .secondaryBodyText,
                   ),
                 ],
+
                 const SizedBox(height: 10),
+
                 Row(
                   children: [
                     const Icon(
-                      Icons.calendar_today_outlined,
+                      Icons
+                          .calendar_today_outlined,
                       size: 15,
-                      color: Color(0xFFB6C5E0),
+                      color:
+                          AppTheme.secondaryText,
                     ),
+
                     const SizedBox(width: 6),
+
                     Text(
                       formattedDate,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFFB6C5E0),
-                      ),
+                      style:
+                          AppTheme.labelText,
                     ),
                   ],
                 ),
@@ -609,71 +619,67 @@ class TeacherCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Профиль преподавателя $teacher добавим позже',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF10213D),
-          borderRadius: BorderRadius.circular(18),
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2B7FFF)
-                    .withValues(
-                  alpha: 0.15,
+        onTap: () {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Профиль преподавателя $teacher добавим позже',
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const _BlueIconBox(
+                icon: Icons.person_outline,
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Преподаватель',
+                      style:
+                          AppTheme.labelText,
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    Text(
+                      teacher,
+                      style:
+                          AppTheme.cardTitle,
+                    ),
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(
-                Icons.person_outline,
-                color: Color(0xFF2B7FFF),
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.chevron_right_rounded,
+                color:
+                    AppTheme.secondaryText,
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Преподаватель',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFFB6C5E0),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    teacher,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right,
-              color: Color(0xFFB6C5E0),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -696,30 +702,23 @@ class LessonInfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment:
+            CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2B7FFF)
-                  .withValues(
-                alpha: 0.15,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF2B7FFF),
-            ),
+          _BlueIconBox(
+            icon: icon,
           ),
-          const SizedBox(width: 16),
+
+          const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -727,19 +726,16 @@ class LessonInfoTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFFB6C5E0),
-                  ),
+                  style:
+                      AppTheme.labelText,
                 ),
-                const SizedBox(height: 4),
+
+                const SizedBox(height: 3),
+
                 Text(
                   value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
+                  style:
+                      AppTheme.cardTitle,
                 ),
               ],
             ),
@@ -750,11 +746,43 @@ class LessonInfoTile extends StatelessWidget {
   }
 }
 
+class _BlueIconBox extends StatelessWidget {
+  final IconData icon;
+
+  const _BlueIconBox({
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue
+            .withValues(
+          alpha: 0.15,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppTheme.smallRadius,
+        ),
+      ),
+      child: Icon(
+        icon,
+        size: 22,
+        color: AppTheme.primaryBlue,
+      ),
+    );
+  }
+}
+
 class EmptyInfoCard extends StatelessWidget {
+  final IconData icon;
   final String text;
 
   const EmptyInfoCard({
     super.key,
+    required this.icon,
     required this.text,
   });
 
@@ -762,16 +790,121 @@ class EmptyInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF10213D),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Color(0xFFB6C5E0),
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
         ),
+      ),
+      child: Row(
+        children: [
+          _BlueIconBox(
+            icon: icon,
+          ),
+
+          const SizedBox(width: 14),
+
+          Expanded(
+            child: Text(
+              text,
+              style:
+                  AppTheme.secondaryBodyText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StateCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String description;
+  final String? buttonText;
+  final VoidCallback? onPressed;
+
+  const _StateCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.description,
+    this.buttonText,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 22,
+        vertical: 26,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(
+                alpha: 0.12,
+              ),
+              borderRadius:
+                  BorderRadius.circular(
+                AppTheme.cardRadius,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 27,
+              color: iconColor,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: AppTheme.cardTitle,
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style:
+                AppTheme.secondaryBodyText,
+          ),
+
+          if (buttonText != null &&
+              onPressed != null) ...[
+            const SizedBox(height: 18),
+
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(
+                  Icons.refresh,
+                ),
+                label: Text(
+                  buttonText!,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

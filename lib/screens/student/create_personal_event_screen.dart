@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../models/personal_event.dart';
 import '../../services/personal_event_service.dart';
 
@@ -55,7 +56,6 @@ class _CreatePersonalEventScreenState
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-
     super.dispose();
   }
 
@@ -94,7 +94,6 @@ class _CreatePersonalEventScreenState
           ),
         ),
       );
-
       return;
     }
 
@@ -109,7 +108,6 @@ class _CreatePersonalEventScreenState
           ),
         ),
       );
-
       return;
     }
 
@@ -208,26 +206,40 @@ class _CreatePersonalEventScreenState
               ? 'Редактирование события'
               : 'Новое событие',
         ),
-        backgroundColor: Colors.transparent,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
+            AppTheme.screenPadding,
             20,
-            16,
-            20,
+            AppTheme.screenPadding,
             32,
           ),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Название',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+              Text(
+                _isEditing
+                    ? 'Измените информацию'
+                    : 'Добавьте событие',
+                style: AppTheme.pageTitle,
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                _isEditing
+                    ? 'Обновите необходимые данные события.'
+                    : 'Событие появится в вашем личном календаре.',
+                style:
+                    AppTheme.secondaryBodyText,
+              ),
+
+              const SizedBox(height: 30),
+
+              const _FieldTitle(
+                title: 'Название',
               ),
 
               const SizedBox(height: 8),
@@ -236,28 +248,16 @@ class _CreatePersonalEventScreenState
                 controller: _titleController,
                 textCapitalization:
                     TextCapitalization.sentences,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText:
                       'Например, подготовить презентацию',
-                  filled: true,
-                  fillColor:
-                      const Color(0xFF10213D),
-                  border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
                 ),
               ),
 
               const SizedBox(height: 22),
 
-              const Text(
-                'Описание',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+              const _FieldTitle(
+                title: 'Описание',
               ),
 
               const SizedBox(height: 8),
@@ -267,74 +267,102 @@ class _CreatePersonalEventScreenState
                     _descriptionController,
                 textCapitalization:
                     TextCapitalization.sentences,
-                maxLines: 5,
-                decoration: InputDecoration(
+                minLines: 5,
+                maxLines: 7,
+                decoration: const InputDecoration(
                   hintText:
                       'Добавьте подробности события',
-                  filled: true,
-                  fillColor:
-                      const Color(0xFF10213D),
-                  border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
+                  alignLabelWithHint: true,
                 ),
               ),
 
               const SizedBox(height: 22),
 
-              const Text(
-                'Дата',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+              const _FieldTitle(
+                title: 'Дата',
               ),
 
               const SizedBox(height: 8),
 
-              InkWell(
-                onTap: _selectDate,
+              Material(
+                color: AppTheme.card,
                 borderRadius:
-                    BorderRadius.circular(16),
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color:
-                        const Color(0xFF10213D),
-                    borderRadius:
-                        BorderRadius.circular(16),
+                    BorderRadius.circular(
+                  AppTheme.cardRadius,
+                ),
+                child: InkWell(
+                  onTap: _selectDate,
+                  borderRadius:
+                      BorderRadius.circular(
+                    AppTheme.cardRadius,
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_month_outlined,
-                        color:
-                            Color(0xFF2B7FFF),
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      Expanded(
-                        child: Text(
-                          _formatDate(
-                            _selectedDate,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration:
+                              BoxDecoration(
+                            color: AppTheme
+                                .primaryBlue
+                                .withValues(
+                              alpha: 0.15,
+                            ),
+                            borderRadius:
+                                BorderRadius.circular(
+                              AppTheme
+                                  .smallRadius,
+                            ),
                           ),
-                          style: const TextStyle(
-                            fontSize: 16,
+                          child: const Icon(
+                            Icons
+                                .calendar_month_outlined,
+                            color: AppTheme
+                                .primaryBlue,
+                            size: 22,
                           ),
                         ),
-                      ),
 
-                      const Icon(
-                        Icons.chevron_right,
-                        color:
-                            Color(0xFFB6C5E0),
-                      ),
-                    ],
+                        const SizedBox(
+                          width: 14,
+                        ),
+
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment
+                                    .start,
+                            children: [
+                              const Text(
+                                'Выбранная дата',
+                                style: AppTheme
+                                    .labelText,
+                              ),
+                              const SizedBox(
+                                height: 3,
+                              ),
+                              Text(
+                                _formatDate(
+                                  _selectedDate,
+                                ),
+                                style: AppTheme
+                                    .cardTitle,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const Icon(
+                          Icons
+                              .chevron_right_rounded,
+                          color: AppTheme
+                              .secondaryText,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -343,19 +371,10 @@ class _CreatePersonalEventScreenState
 
               SizedBox(
                 width: double.infinity,
-                height: 54,
                 child: FilledButton(
                   onPressed: _isSaving
                       ? null
                       : _saveEvent,
-                  style: FilledButton.styleFrom(
-                    backgroundColor:
-                        const Color(0xFF2B7FFF),
-                    shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(16),
-                    ),
-                  ),
                   child: _isSaving
                       ? const SizedBox(
                           width: 22,
@@ -370,12 +389,6 @@ class _CreatePersonalEventScreenState
                           _isEditing
                               ? 'Сохранить изменения'
                               : 'Создать событие',
-                          style:
-                              const TextStyle(
-                            fontSize: 16,
-                            fontWeight:
-                                FontWeight.w600,
-                          ),
                         ),
                 ),
               ),
@@ -383,6 +396,22 @@ class _CreatePersonalEventScreenState
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FieldTitle extends StatelessWidget {
+  final String title;
+
+  const _FieldTitle({
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: AppTheme.cardTitle,
     );
   }
 }

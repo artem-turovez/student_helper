@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../models/lesson.dart';
 import '../../services/schedule_service.dart';
 import 'lesson_details_screen.dart';
@@ -62,17 +63,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   DateTime get selectedMonday {
     return currentMonday.add(
-      Duration(
-        days: weekOffset * 7,
-      ),
+      Duration(days: weekOffset * 7),
     );
   }
 
   DateTime get selectedDate {
     return selectedMonday.add(
-      Duration(
-        days: selectedDayIndex,
-      ),
+      Duration(days: selectedDayIndex),
     );
   }
 
@@ -89,30 +86,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
 
     try {
-      final User? user =
-          FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        throw Exception(
-          'Пользователь не авторизован',
-        );
+        throw Exception('Пользователь не авторизован');
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          userDocument =
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
 
       if (!userDocument.exists) {
-        throw Exception(
-          'Профиль пользователя не найден',
-        );
+        throw Exception('Профиль пользователя не найден');
       }
 
-      final Map<String, dynamic>? userData =
-          userDocument.data();
+      final Map<String, dynamic>? userData = userDocument.data();
 
       if (userData == null) {
         throw Exception(
@@ -268,7 +258,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String getWeekTitle() {
     final DateTime monday = selectedMonday;
-
     final DateTime saturday = monday.add(
       const Duration(days: 5),
     );
@@ -312,237 +301,121 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            8,
-          ),
-          child: Text(
-            'Расписание',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppTheme.screenPadding,
+              24,
+              AppTheme.screenPadding,
+              0,
             ),
-          ),
-        ),
-
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: isLoadingLessons
-                    ? null
-                    : previousWeek,
-                icon: const Icon(
-                  Icons.chevron_left,
-                ),
-                tooltip: 'Предыдущая неделя',
-              ),
-
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      getWeekTitle(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-
-                    const SizedBox(height: 3),
-
-                    Text(
-                      getWeekSubtitle(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFB6C5E0),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              IconButton(
-                onPressed: isLoadingLessons
-                    ? null
-                    : nextWeek,
-                icon: const Icon(
-                  Icons.chevron_right,
-                ),
-                tooltip: 'Следующая неделя',
-              ),
-            ],
-          ),
-        ),
-
-        if (weekOffset != 0)
-          Center(
-            child: TextButton.icon(
-              onPressed: isLoadingLessons
-                  ? null
-                  : returnToCurrentWeek,
-              icon: const Icon(
-                Icons.today_outlined,
-                size: 18,
-              ),
-              label: const Text(
-                'Текущая неделя',
-              ),
+            child: Text(
+              'Расписание',
+              style: AppTheme.pageTitle,
             ),
           ),
 
-        const SizedBox(height: 10),
+          const SizedBox(height: 22),
 
-        SizedBox(
-          height: 82,
-          child: ListView.separated(
+          Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 24,
+              horizontal: AppTheme.screenPadding,
             ),
-            scrollDirection: Axis.horizontal,
-            itemCount: days.length,
-            separatorBuilder: (_, _) {
-              return const SizedBox(
-                width: 10,
-              );
-            },
-            itemBuilder: (context, index) {
-              final bool isSelected =
-                  selectedDayIndex == index;
-
-              final DateTime date =
-                  getDateForIndex(index);
-
-              final bool today =
-                  isToday(date);
-
-              return GestureDetector(
-                onTap: isLoadingLessons
-                    ? null
-                    : () {
-                        selectDay(index);
-                      },
-                child: AnimatedContainer(
-                  duration: const Duration(
-                    milliseconds: 200,
-                  ),
-                  width: 58,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? const Color(
-                            0xFF2B7FFF,
-                          )
-                        : const Color(
-                            0xFF10213D,
-                          ),
-                    borderRadius:
-                        BorderRadius.circular(
-                      18,
-                    ),
-                    border: today &&
-                            !isSelected
-                        ? Border.all(
-                            color:
-                                const Color(
-                              0xFF2B7FFF,
-                            ),
-                            width: 1.5,
-                          )
-                        : null,
-                  ),
-                  child: Column(
-                    mainAxisAlignment:
-                        MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        days[index],
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isSelected
-                              ? Colors.white
-                              : const Color(
-                                  0xFFB6C5E0,
-                                ),
-                        ),
-                      ),
-
-                      const SizedBox(
-                        height: 6,
-                      ),
-
-                      Text(
-                        '${date.day}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+            child: _WeekSelector(
+              title: getWeekTitle(),
+              subtitle: getWeekSubtitle(),
+              canReturnToCurrentWeek: weekOffset != 0,
+              isLoading: isLoadingLessons,
+              onPrevious: previousWeek,
+              onNext: nextWeek,
+              onCurrentWeek: returnToCurrentWeek,
+            ),
           ),
-        ),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 18),
 
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${selectedDate.day} '
-                  '${getMonthName(selectedDate.month)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: Color(
-                      0xFFB6C5E0,
-                    ),
-                  ),
-                ),
+          SizedBox(
+            height: 76,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.screenPadding,
               ),
+              scrollDirection: Axis.horizontal,
+              itemCount: days.length,
+              separatorBuilder: (_, _) {
+                return const SizedBox(width: 8);
+              },
+              itemBuilder: (context, index) {
+                final bool isSelected =
+                    selectedDayIndex == index;
 
-              if (groupId != null)
-                Text(
-                  groupId!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(
-                      0xFFB6C5E0,
-                    ),
+                final DateTime date =
+                    getDateForIndex(index);
+
+                return _DayButton(
+                  day: days[index],
+                  date: date.day,
+                  isSelected: isSelected,
+                  isToday: isToday(date),
+                  onTap: isLoadingLessons
+                      ? null
+                      : () => selectDay(index),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.screenPadding,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${selectedDate.day} '
+                    '${getMonthName(selectedDate.month)}',
+                    style: AppTheme.sectionTitle,
                   ),
                 ),
-            ],
+                if (groupId != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.card,
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.smallRadius,
+                      ),
+                    ),
+                    child: Text(
+                      groupId!,
+                      style: AppTheme.labelText,
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
 
-        const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-        Expanded(
-          child: buildScheduleContent(),
-        ),
-      ],
+          Expanded(
+            child: buildScheduleContent(),
+          ),
+        ],
+      ),
     );
   }
 
   Widget buildScheduleContent() {
-    if (isLoadingGroup ||
-        isLoadingLessons) {
+    if (isLoadingGroup || isLoadingLessons) {
       return const Center(
         child: CircularProgressIndicator(),
       );
@@ -567,26 +440,215 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     return RefreshIndicator(
       onRefresh: loadLessons,
+      color: AppTheme.primaryBlue,
+      backgroundColor: AppTheme.card,
       child: ListView.separated(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
-          24,
+          AppTheme.screenPadding,
           0,
-          24,
-          24,
+          AppTheme.screenPadding,
+          32,
         ),
         itemCount: lessons.length,
-        separatorBuilder: (_, _ ) {
-          return const SizedBox(
-            height: 14,
-          );
+        separatorBuilder: (_, _) {
+          return const SizedBox(height: 10);
         },
         itemBuilder: (context, index) {
           return LessonCard(
             lesson: lessons[index],
           );
         },
+      ),
+    );
+  }
+}
+
+class _WeekSelector extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool canReturnToCurrentWeek;
+  final bool isLoading;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onCurrentWeek;
+
+  const _WeekSelector({
+    required this.title,
+    required this.subtitle,
+    required this.canReturnToCurrentWeek,
+    required this.isLoading,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onCurrentWeek,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+      ),
+      child: Row(
+        children: [
+          _ArrowButton(
+            icon: Icons.chevron_left_rounded,
+            tooltip: 'Предыдущая неделя',
+            onPressed: isLoading ? null : onPrevious,
+          ),
+
+          Expanded(
+            child: GestureDetector(
+              onTap: canReturnToCurrentWeek && !isLoading
+                  ? onCurrentWeek
+                  : null,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 2,
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: AppTheme.cardTitle,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: canReturnToCurrentWeek
+                            ? AppTheme.primaryBlue
+                            : AppTheme.secondaryText,
+                        fontWeight: canReturnToCurrentWeek
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          _ArrowButton(
+            icon: Icons.chevron_right_rounded,
+            tooltip: 'Следующая неделя',
+            onPressed: isLoading ? null : onNext,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArrowButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  const _ArrowButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        backgroundColor:
+            AppTheme.primaryBlue.withValues(alpha: 0.12),
+        foregroundColor: AppTheme.primaryBlue,
+        disabledForegroundColor:
+            AppTheme.secondaryText.withValues(alpha: 0.4),
+      ),
+      icon: Icon(icon),
+    );
+  }
+}
+
+class _DayButton extends StatelessWidget {
+  final String day;
+  final int date;
+  final bool isSelected;
+  final bool isToday;
+  final VoidCallback? onTap;
+
+  const _DayButton({
+    required this.day,
+    required this.date,
+    required this.isSelected,
+    required this.isToday,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isSelected
+          ? AppTheme.primaryBlue
+          : AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 56,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(
+              AppTheme.cardRadius,
+            ),
+            border: isToday && !isSelected
+                ? Border.all(
+                    color: AppTheme.primaryBlue,
+                    width: 1.5,
+                  )
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                day,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isSelected
+                      ? Colors.white
+                      : AppTheme.secondaryText,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '$date',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? Colors.white
+                      : AppTheme.primaryText,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -602,200 +664,161 @@ class LessonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () {
-        final DateTime lessonDate =
-            lesson.date ??
-                DateTime.now();
-
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) {
-              return LessonDetailsScreen(
-                lesson: lesson,
-                date: lessonDate,
-              );
-            },
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF10213D),
-          borderRadius: BorderRadius.circular(20),
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
         ),
-        child: Row(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: const Color(
-                  0xFF2B7FFF,
-                ).withValues(
-                  alpha: 0.15,
+        onTap: () {
+          final DateTime lessonDate =
+              lesson.date ?? DateTime.now();
+
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) {
+                return LessonDetailsScreen(
+                  lesson: lesson,
+                  date: lessonDate,
+                );
+              },
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(
+                    alpha: 0.15,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.smallRadius,
+                  ),
                 ),
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
-              ),
-              child: Center(
+                alignment: Alignment.center,
                 child: Text(
                   '${lesson.number}',
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
-                    color:
-                        Color(0xFF2B7FFF),
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryBlue,
                   ),
                 ),
               ),
-            ),
 
-            const SizedBox(width: 16),
+              const SizedBox(width: 14),
 
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    lesson.subject,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight:
-                          FontWeight.bold,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lesson.subject,
+                      style: AppTheme.cardTitle,
                     ),
-                  ),
 
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 6),
 
-                  Text(
-                    lesson.time,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color:
-                          Color(0xFFB6C5E0),
+                    Text(
+                      lesson.time,
+                      style: AppTheme.secondaryBodyText,
                     ),
-                  ),
 
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.person_outline,
-                        size: 18,
-                        color:
-                            Color(0xFFB6C5E0),
+                    _LessonInfo(
+                      icon: Icons.person_outline,
+                      text: lesson.teacher,
+                    ),
+
+                    const SizedBox(height: 7),
+
+                    _LessonInfo(
+                      icon: Icons.meeting_room_outlined,
+                      text: lesson.room,
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
-
-                      const SizedBox(width: 6),
-
-                      Expanded(
-                        child: Text(
-                          lesson.teacher,
-                          style:
-                              const TextStyle(
-                            fontSize: 14,
-                            color: Color(
-                              0xFFB6C5E0,
-                            ),
-                          ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withValues(
+                          alpha: 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          10,
                         ),
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons
-                            .meeting_room_outlined,
-                        size: 18,
-                        color:
-                            Color(0xFFB6C5E0),
-                      ),
-
-                      const SizedBox(width: 6),
-
-                      Expanded(
-                        child: Text(
-                          lesson.room,
-                          style:
-                              const TextStyle(
-                            fontSize: 14,
-                            color: Color(
-                              0xFFB6C5E0,
-                            ),
-                          ),
+                      child: Text(
+                        lesson.type,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(
-                        0xFF2B7FFF,
-                      ).withValues(
-                        alpha: 0.12,
-                      ),
-                      borderRadius:
-                          BorderRadius.circular(
-                        10,
-                      ),
-                    ),
-                    child: Text(
-                      lesson.type,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color:
-                            Color(0xFF2B7FFF),
-                        fontWeight:
-                            FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-            const Padding(
-              padding: EdgeInsets.only(
-                top: 10,
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppTheme.secondaryText,
+                ),
               ),
-              child: Icon(
-                Icons.chevron_right,
-                color:
-                    Color(0xFFB6C5E0),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _LessonInfo extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _LessonInfo({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: AppTheme.secondaryText,
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTheme.secondaryBodyText,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -806,48 +829,64 @@ class EmptySchedule extends StatelessWidget {
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return const Center(
+  Widget build(BuildContext context) {
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
-          children: [
-            Icon(
-              Icons
-                  .event_available_outlined,
-              size: 64,
-              color:
-                  Color(0xFF2B7FFF),
+        padding: const EdgeInsets.fromLTRB(
+          AppTheme.screenPadding,
+          20,
+          AppTheme.screenPadding,
+          40,
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 30,
+          ),
+          decoration: BoxDecoration(
+            color: AppTheme.card,
+            borderRadius: BorderRadius.circular(
+              AppTheme.cardRadius,
             ),
-
-            SizedBox(height: 18),
-
-            Text(
-              'Занятий нет',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight:
-                    FontWeight.bold,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(
+                    alpha: 0.12,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.cardRadius,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.event_available_outlined,
+                  size: 28,
+                  color: AppTheme.primaryBlue,
+                ),
               ),
-            ),
 
-            SizedBox(height: 8),
+              const SizedBox(height: 16),
 
-            Text(
-              'На этот день расписание пустое.',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color:
-                    Color(0xFFB6C5E0),
+              const Text(
+                'Занятий нет',
+                style: AppTheme.sectionTitle,
               ),
-            ),
-          ],
+
+              const SizedBox(height: 6),
+
+              const Text(
+                'На этот день расписание пустое.',
+                textAlign: TextAlign.center,
+                style: AppTheme.secondaryBodyText,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -865,58 +904,68 @@ class ScheduleError extends StatelessWidget {
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Center(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.screenPadding,
+        10,
+        AppTheme.screenPadding,
+        32,
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(
+            AppTheme.cardRadius,
+          ),
+        ),
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 58,
-              color:
-                  Color(0xFFB6C5E0),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withValues(
+                  alpha: 0.12,
+                ),
+                borderRadius: BorderRadius.circular(
+                  AppTheme.cardRadius,
+                ),
+              ),
+              child: const Icon(
+                Icons.error_outline,
+                size: 28,
+                color: AppTheme.danger,
+              ),
             ),
 
             const SizedBox(height: 16),
 
             const Text(
               'Не удалось загрузить расписание',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight:
-                    FontWeight.bold,
-              ),
+              textAlign: TextAlign.center,
+              style: AppTheme.sectionTitle,
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
             Text(
               message,
-              textAlign:
-                  TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color:
-                    Color(0xFFB6C5E0),
-              ),
+              textAlign: TextAlign.center,
+              style: AppTheme.secondaryBodyText,
             ),
 
             const SizedBox(height: 20),
 
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(
-                Icons.refresh,
-              ),
-              label: const Text(
-                'Повторить',
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Повторить'),
               ),
             ),
           ],
