@@ -1,1 +1,2 @@
 pdfplumber==0.11.7
+firebase-admin>=7.0.0,<8.0.0

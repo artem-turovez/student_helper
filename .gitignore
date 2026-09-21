@@ -51,3 +51,6 @@ app.*.map.json
 tools/schedule_parser/.venv/
 tools/schedule_parser/*.pdf
 tools/schedule_parser/parsed/
+
+# Firebase Admin credentials
+tools/schedule_parser/service-account.json
