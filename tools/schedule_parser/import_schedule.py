@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from firebase_connection import get_firestore_client
+from teacher_names import (
+    normalize_teacher_name,
+    get_teacher_surname_key,
+)
 
 
 def load_schedule(
@@ -56,19 +60,6 @@ def normalize_name(
     )
 
     return value
-
-
-def get_surname(
-    full_name: str,
-) -> str:
-    normalized = normalize_name(
-        full_name,
-    )
-
-    if not normalized:
-        return ""
-
-    return normalized.split()[0]
 
 
 def load_teachers(
@@ -123,7 +114,7 @@ def build_teacher_indexes(
             name,
         )
 
-        surname = get_surname(
+        surname = get_teacher_surname_key(
             name,
         )
 
@@ -175,8 +166,12 @@ def find_teacher(
         неоднозначном совпадении
     """
 
-    parsed_normalized = normalize_name(
+    canonical_name = normalize_teacher_name(
         parsed_name,
+    )
+
+    parsed_normalized = normalize_name(
+        canonical_name,
     )
 
     if not parsed_normalized:
@@ -205,8 +200,8 @@ def find_teacher(
             exact_matches,
         )
 
-    parsed_surname = get_surname(
-        parsed_name,
+    parsed_surname = get_teacher_surname_key(
+        canonical_name,
     )
 
     if not parsed_surname:
@@ -429,13 +424,24 @@ def prepare_lesson(
     dict[str, list[str]],
     list[str],
 ]:
-    parsed_teachers = [
+    source_teachers = [
         str(name).strip()
         for name in lesson.get(
             "teachers",
             [],
         )
         if str(name).strip()
+    ]
+
+    # В Firestore сохраняем уже канонические
+    # имена преподавателей.
+    #
+    # Например:
+    # Бтрим -> Бутрим
+    # Корнлова -> Корнилова
+    parsed_teachers = [
+        normalize_teacher_name(name)
+        for name in source_teachers
     ]
 
     resolved_ids: list[str] = []
