@@ -36,4 +36,53 @@ class AcademicEventService {
 
     return events;
   }
+
+  Future<List<AcademicEvent>> getEventsForMonth({
+    required String groupId,
+    required DateTime month,
+  }) async {
+    final DateTime startOfMonth = DateTime(
+      month.year,
+      month.month,
+      1,
+    );
+
+    final DateTime startOfNextMonth = DateTime(
+      month.year,
+      month.month + 1,
+      1,
+    );
+
+    final QuerySnapshot<Map<String, dynamic>> snapshot =
+        await _firestore
+            .collection('academicEvents')
+            .where(
+              'groupId',
+              isEqualTo: groupId,
+            )
+            .where(
+              'date',
+              isGreaterThanOrEqualTo:
+                  Timestamp.fromDate(startOfMonth),
+            )
+            .where(
+              'date',
+              isLessThan:
+                  Timestamp.fromDate(startOfNextMonth),
+            )
+            .get();
+
+    final List<AcademicEvent> events = snapshot.docs
+        .map(
+          (document) =>
+              AcademicEvent.fromFirestore(document),
+        )
+        .toList();
+
+    events.sort(
+      (a, b) => a.date.compareTo(b.date),
+    );
+
+    return events;
+  }
 }
