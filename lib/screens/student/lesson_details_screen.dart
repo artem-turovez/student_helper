@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../models/academic_event.dart';
 import '../../models/lesson.dart';
+import '../../services/academic_event_service.dart';
 
-class LessonDetailsScreen extends StatelessWidget {
+class LessonDetailsScreen extends StatefulWidget {
   final Lesson lesson;
   final DateTime date;
 
@@ -11,6 +13,84 @@ class LessonDetailsScreen extends StatelessWidget {
     required this.lesson,
     required this.date,
   });
+
+  @override
+  State<LessonDetailsScreen> createState() =>
+      _LessonDetailsScreenState();
+}
+
+class _LessonDetailsScreenState
+    extends State<LessonDetailsScreen> {
+  final AcademicEventService _academicEventService =
+      AcademicEventService();
+
+  List<AcademicEvent> _events = [];
+
+  bool _isLoadingEvents = true;
+  bool _hasEventsError = false;
+
+  Lesson get lesson => widget.lesson;
+  DateTime get date => widget.date;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAcademicEvents();
+  }
+
+  Future<void> _loadAcademicEvents() async {
+    final String? lessonId = lesson.id;
+    final String? groupId = lesson.groupId;
+
+    if (lessonId == null ||
+        lessonId.trim().isEmpty ||
+        groupId == null ||
+        groupId.trim().isEmpty) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _events = [];
+        _isLoadingEvents = false;
+        _hasEventsError = false;
+      });
+
+      return;
+    }
+
+    try {
+      final List<AcademicEvent> events =
+          await _academicEventService.getEventsForLesson(
+        groupId: groupId,
+        lessonId: lessonId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _events = events;
+        _isLoadingEvents = false;
+        _hasEventsError = false;
+      });
+    } catch (error) {
+      debugPrint(
+        'Ошибка загрузки учебных событий: $error',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _events = [];
+        _isLoadingEvents = false;
+        _hasEventsError = true;
+      });
+    }
+  }
 
   String getMonthName(int month) {
     const List<String> months = [
@@ -50,6 +130,14 @@ class LessonDetailsScreen extends StatelessWidget {
         '${date.day} ${getMonthName(date.month)} ${date.year}';
   }
 
+  String getEventDate(DateTime eventDate) {
+    final String day = eventDate.day.toString().padLeft(2, '0');
+    final String month =
+        eventDate.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${eventDate.year}';
+  }
+
   String getSubgroup() {
     final String? subgroup = lesson.subgroup;
 
@@ -70,6 +158,144 @@ class LessonDetailsScreen extends StatelessWidget {
     return groupId;
   }
 
+  IconData getEventIcon(String type) {
+    final String normalizedType = type.toLowerCase();
+
+    if (normalizedType.contains('лаборатор')) {
+      return Icons.science_outlined;
+    }
+
+    if (normalizedType.contains('контроль')) {
+      return Icons.assignment_outlined;
+    }
+
+    if (normalizedType.contains('тест')) {
+      return Icons.quiz_outlined;
+    }
+
+    if (normalizedType.contains('экзамен')) {
+      return Icons.school_outlined;
+    }
+
+    if (normalizedType.contains('окр')) {
+      return Icons.fact_check_outlined;
+    }
+
+    return Icons.event_note_outlined;
+  }
+
+  Widget _buildAcademicEvents() {
+    if (_isLoadingEvents) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(
+          vertical: 24,
+        ),
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_hasEventsError) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10213D),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 42,
+              color: Color(0xFFB6C5E0),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Не удалось загрузить события',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _isLoadingEvents = true;
+                  _hasEventsError = false;
+                });
+
+                _loadAcademicEvents();
+              },
+              child: const Text(
+                'Повторить',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_events.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10213D),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Column(
+          children: [
+            Icon(
+              Icons.event_note_outlined,
+              size: 42,
+              color: Color(0xFF2B7FFF),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Событий пока нет',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Контрольные, лабораторные, тесты '
+              'и другие учебные события будут '
+              'отображаться здесь.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: Color(0xFFB6C5E0),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: _events.map(
+        (event) {
+          return Padding(
+            padding: const EdgeInsets.only(
+              bottom: 12,
+            ),
+            child: AcademicEventCard(
+              event: event,
+              icon: getEventIcon(event.type),
+              formattedDate: getEventDate(event.date),
+            ),
+          );
+        },
+      ).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,277 +305,295 @@ class LessonDetailsScreen extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            24,
-            12,
-            24,
-            32,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                lesson.subject,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2B7FFF).withValues(
-                    alpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  lesson.type,
+        child: RefreshIndicator(
+          onRefresh: _loadAcademicEvents,
+          child: SingleChildScrollView(
+            physics:
+                const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              24,
+              12,
+              24,
+              32,
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  lesson.subject,
                   style: const TextStyle(
-                    color: Color(0xFF2B7FFF),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Основная информация',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              LessonInfoTile(
-                icon: Icons.calendar_today_outlined,
-                title: 'Дата',
-                value: getFormattedDate(),
-              ),
-
-              const SizedBox(height: 12),
-
-              LessonInfoTile(
-                icon: Icons.format_list_numbered,
-                title: 'Номер пары',
-                value: '${lesson.number} пара',
-              ),
-
-              const SizedBox(height: 12),
-
-              LessonInfoTile(
-                icon: Icons.access_time_outlined,
-                title: 'Время',
-                value: lesson.time,
-              ),
-
-              const SizedBox(height: 28),
-
-              const Text(
-                'Преподаватели',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              ...lesson.teachers.map(
-                (teacher) {
-                  return Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 12,
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2B7FFF)
+                        .withValues(
+                      alpha: 0.12,
                     ),
-                    child: TeacherCard(
-                      teacher: teacher,
-                    ),
-                  );
-                },
-              ),
-
-              if (lesson.teachers.isEmpty)
-                const EmptyInfoCard(
-                  text: 'Преподаватель не указан',
-                ),
-
-              const SizedBox(height: 16),
-
-              const Text(
-                'Аудитории',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              ...lesson.rooms.map(
-                (room) {
-                  return Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 12,
-                    ),
-                    child: LessonInfoTile(
-                      icon: Icons.meeting_room_outlined,
-                      title: 'Аудитория',
-                      value: room,
-                    ),
-                  );
-                },
-              ),
-
-              if (lesson.rooms.isEmpty)
-                const EmptyInfoCard(
-                  text: 'Аудитория не указана',
-                ),
-
-              const SizedBox(height: 16),
-
-              const Text(
-                'Учебная группа',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              LessonInfoTile(
-                icon: Icons.groups_outlined,
-                title: 'Группа',
-                value: getGroup(),
-              ),
-
-              const SizedBox(height: 12),
-
-              LessonInfoTile(
-                icon: Icons.group_work_outlined,
-                title: 'Подгруппа',
-                value: getSubgroup(),
-              ),
-
-              const SizedBox(height: 28),
-
-              Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Учебные события',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    lesson.type,
+                    style: const TextStyle(
+                      color: Color(0xFF2B7FFF),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Основная информация',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                LessonInfoTile(
+                  icon: Icons.calendar_today_outlined,
+                  title: 'Дата',
+                  value: getFormattedDate(),
+                ),
+                const SizedBox(height: 12),
+                LessonInfoTile(
+                  icon: Icons.format_list_numbered,
+                  title: 'Номер пары',
+                  value: '${lesson.number} пара',
+                ),
+                const SizedBox(height: 12),
+                LessonInfoTile(
+                  icon: Icons.access_time_outlined,
+                  title: 'Время',
+                  value: lesson.time,
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Преподаватели',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...lesson.teachers.map(
+                  (teacher) {
+                    return Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: 12,
+                      ),
+                      child: TeacherCard(
+                        teacher: teacher,
+                      ),
+                    );
+                  },
+                ),
+                if (lesson.teachers.isEmpty)
+                  const EmptyInfoCard(
+                    text: 'Преподаватель не указан',
+                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Аудитории',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...lesson.rooms.map(
+                  (room) {
+                    return Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: 12,
+                      ),
+                      child: LessonInfoTile(
+                        icon:
+                            Icons.meeting_room_outlined,
+                        title: 'Аудитория',
+                        value: room,
+                      ),
+                    );
+                  },
+                ),
+                if (lesson.rooms.isEmpty)
+                  const EmptyInfoCard(
+                    text: 'Аудитория не указана',
+                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Учебная группа',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                LessonInfoTile(
+                  icon: Icons.groups_outlined,
+                  title: 'Группа',
+                  value: getGroup(),
+                ),
+                const SizedBox(height: 12),
+                LessonInfoTile(
+                  icon: Icons.group_work_outlined,
+                  title: 'Подгруппа',
+                  value: getSubgroup(),
+                ),
+                const SizedBox(height: 28),
 
-                  TextButton(
+                const Text(
+                  'Учебные события',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                _buildAcademicEvents(),
+
+                const SizedBox(height: 28),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: FilledButton.icon(
                     onPressed: () {
                       ScaffoldMessenger.of(context)
                           .showSnackBar(
                         const SnackBar(
                           content: Text(
-                            'Список учебных событий добавим позже',
+                            'Создание напоминаний добавим позже',
                           ),
                           behavior:
                               SnackBarBehavior.floating,
                         ),
                       );
                     },
-                    child: const Text(
-                      'Все',
+                    icon: const Icon(
+                      Icons.notifications_active_outlined,
+                    ),
+                    label: const Text(
+                      'Создать напоминание',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AcademicEventCard extends StatelessWidget {
+  final AcademicEvent event;
+  final IconData icon;
+  final String formattedDate;
+
+  const AcademicEventCard({
+    super.key,
+    required this.event,
+    required this.icon,
+    required this.formattedDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10213D),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2B7FFF)
+                  .withValues(
+                alpha: 0.15,
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF2B7FFF),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.type,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF2B7FFF),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  event.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+                if (event.description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  Text(
+                    event.description,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      color: Color(0xFFB6C5E0),
                     ),
                   ),
                 ],
-              ),
-
-              const SizedBox(height: 8),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10213D),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Column(
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    Icon(
-                      Icons.event_note_outlined,
-                      size: 42,
-                      color: Color(0xFF2B7FFF),
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 15,
+                      color: Color(0xFFB6C5E0),
                     ),
-
-                    SizedBox(height: 12),
-
+                    const SizedBox(width: 6),
                     Text(
-                      'Событий пока нет',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-
-                    SizedBox(height: 6),
-
-                    Text(
-                      'Контрольные, лабораторные, тесты '
-                      'и другие учебные события будут '
-                      'отображаться здесь.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.4,
+                      formattedDate,
+                      style: const TextStyle(
+                        fontSize: 13,
                         color: Color(0xFFB6C5E0),
                       ),
                     ),
                   ],
                 ),
-              ),
-
-              const SizedBox(height: 28),
-
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Создание напоминаний добавим позже',
-                        ),
-                        behavior:
-                            SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.notifications_active_outlined,
-                  ),
-                  label: const Text(
-                    'Создать напоминание',
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -390,7 +634,8 @@ class TeacherCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFF2B7FFF).withValues(
+                color: const Color(0xFF2B7FFF)
+                    .withValues(
                   alpha: 0.15,
                 ),
                 borderRadius: BorderRadius.circular(14),
@@ -400,9 +645,7 @@ class TeacherCard extends StatelessWidget {
                 color: Color(0xFF2B7FFF),
               ),
             ),
-
             const SizedBox(width: 16),
-
             Expanded(
               child: Column(
                 crossAxisAlignment:
@@ -415,9 +658,7 @@ class TeacherCard extends StatelessWidget {
                       color: Color(0xFFB6C5E0),
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
                   Text(
                     teacher,
                     style: const TextStyle(
@@ -428,7 +669,6 @@ class TeacherCard extends StatelessWidget {
                 ],
               ),
             ),
-
             const Icon(
               Icons.chevron_right,
               color: Color(0xFFB6C5E0),
@@ -468,7 +708,8 @@ class LessonInfoTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF2B7FFF).withValues(
+              color: const Color(0xFF2B7FFF)
+                  .withValues(
                 alpha: 0.15,
               ),
               borderRadius: BorderRadius.circular(12),
@@ -478,9 +719,7 @@ class LessonInfoTile extends StatelessWidget {
               color: const Color(0xFF2B7FFF),
             ),
           ),
-
           const SizedBox(width: 16),
-
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -493,9 +732,7 @@ class LessonInfoTile extends StatelessWidget {
                     color: Color(0xFFB6C5E0),
                   ),
                 ),
-
                 const SizedBox(height: 4),
-
                 Text(
                   value,
                   style: const TextStyle(
