@@ -55,7 +55,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.2.0",
+    version="1.3.0",
 )
 
 
@@ -178,6 +178,132 @@ async def admin_check(
         ),
         "user": admin,
     }
+
+
+def serialize_datetime(
+    value,
+) -> str | None:
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    return str(value)
+
+
+@app.get("/admin/users")
+async def get_admin_users(
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        documents = list(
+            db.collection("users").stream()
+        )
+
+        users = []
+
+        for document in documents:
+            data = document.to_dict() or {}
+
+            users.append(
+                {
+                    "uid": document.id,
+                    "name": (
+                        str(
+                            data.get("name")
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    "email": (
+                        str(
+                            data.get("email")
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    "role": (
+                        str(
+                            data.get("role")
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    "groupId": (
+                        str(
+                            data.get("groupId")
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    "teacherId": (
+                        str(
+                            data.get(
+                                "teacherId"
+                            )
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    "createdAt": (
+                        serialize_datetime(
+                            data.get(
+                                "createdAt"
+                            )
+                        )
+                    ),
+                }
+            )
+
+        role_order = {
+            "admin": 0,
+            "teacher": 1,
+            "student": 2,
+        }
+
+        users.sort(
+            key=lambda user: (
+                role_order.get(
+                    user.get("role"),
+                    99,
+                ),
+                (
+                    user.get("name")
+                    or user.get("email")
+                    or ""
+                ).lower(),
+            )
+        )
+
+        return {
+            "status": "ok",
+            "count": len(users),
+            "users": users,
+            "requestedBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка загрузки пользователей:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось загрузить "
+                "пользователей."
+            ),
+        )
 
 
 async def read_pdf_upload(

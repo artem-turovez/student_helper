@@ -13,6 +13,58 @@ class AdminApiException implements Exception {
   String toString() => message;
 }
 
+class AdminUser {
+  const AdminUser({
+    required this.uid,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.groupId,
+    required this.teacherId,
+    required this.createdAt,
+  });
+
+  final String uid;
+  final String? name;
+  final String? email;
+  final String? role;
+  final String? groupId;
+  final String? teacherId;
+  final DateTime? createdAt;
+
+  String get displayName {
+    final String? currentName = name;
+
+    if (currentName != null && currentName.isNotEmpty) {
+      return currentName;
+    }
+
+    final String? currentEmail = email;
+
+    if (currentEmail != null && currentEmail.isNotEmpty) {
+      return currentEmail;
+    }
+
+    return 'Пользователь';
+  }
+
+  factory AdminUser.fromJson(Map<String, dynamic> json) {
+    final String? createdAtString = json['createdAt'] as String?;
+
+    return AdminUser(
+      uid: json['uid'] as String? ?? '',
+      name: json['name'] as String?,
+      email: json['email'] as String?,
+      role: json['role'] as String?,
+      groupId: json['groupId'] as String?,
+      teacherId: json['teacherId'] as String?,
+      createdAt: createdAtString == null
+          ? null
+          : DateTime.tryParse(createdAtString),
+    );
+  }
+}
+
 class ScheduleCheckResult {
   const ScheduleCheckResult({
     required this.status,
@@ -122,18 +174,69 @@ class AdminApiService {
   static Future<Map<String, dynamic>> checkAdmin() async {
     final String token = await _getIdToken();
 
-    final response = await http.get(
-      Uri.parse('$_baseUrl/admin/check'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    try {
+      final http.Response response = await http.get(
+        Uri.parse('$_baseUrl/admin/check'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-    final Map<String, dynamic> data = _decodeResponse(response);
+      final Map<String, dynamic> data = _decodeResponse(response);
 
-    if (response.statusCode != 200) {
-      throw AdminApiException(_extractErrorMessage(data, response.statusCode));
+      if (response.statusCode != 200) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+
+      return data;
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException(
+        'Не удалось подключиться '
+        'к серверу: $error',
+      );
     }
+  }
 
-    return data;
+  static Future<List<AdminUser>> getUsers() async {
+    final String token = await _getIdToken();
+
+    try {
+      final http.Response response = await http.get(
+        Uri.parse('$_baseUrl/admin/users'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final Map<String, dynamic> data = _decodeResponse(response);
+
+      if (response.statusCode != 200) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+
+      final dynamic rawUsers = data['users'];
+
+      if (rawUsers is! List) {
+        throw const AdminApiException(
+          'Сервер вернул некорректный '
+          'список пользователей.',
+        );
+      }
+
+      return rawUsers
+          .whereType<Map>()
+          .map((item) => AdminUser.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException(
+        'Не удалось загрузить '
+        'пользователей: $error',
+      );
+    }
   }
 
   static Future<ScheduleCheckResult> checkSchedule(PlatformFile file) async {

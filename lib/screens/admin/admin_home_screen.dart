@@ -5,6 +5,7 @@ import '../../app/brand.dart';
 import '../../app/theme.dart';
 import '../auth/start_screen.dart';
 import 'schedule_management_screen.dart';
+import 'users_management_screen.dart';
 
 class AdminHomeScreen extends StatelessWidget {
   const AdminHomeScreen({super.key});
@@ -26,6 +27,11 @@ class AdminHomeScreen extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const ScheduleManagementScreen()));
+  }
+
+  void _openUsers(BuildContext context) {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const UsersManagementScreen()));
   }
 
   @override
@@ -119,16 +125,7 @@ class AdminHomeScreen extends StatelessWidget {
                     'Управление учащимися, '
                     'преподавателями и '
                     'администраторами.',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Раздел пользователей '
-                        'будет добавлен позже.',
-                      ),
-                    ),
-                  );
-                },
+                onTap: () => _openUsers(context),
               ),
 
               const SizedBox(height: 14),
