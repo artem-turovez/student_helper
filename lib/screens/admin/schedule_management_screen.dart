@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../services/admin_api_service.dart';
 
 class ScheduleManagementScreen extends StatefulWidget {
   const ScheduleManagementScreen({super.key});
@@ -13,6 +14,7 @@ class ScheduleManagementScreen extends StatefulWidget {
 
 class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
   PlatformFile? selectedFile;
+  bool isChecking = false;
 
   Future<void> _pickPdf() async {
     try {
@@ -51,15 +53,52 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
     });
   }
 
-  void _showNotConnectedMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Отправку PDF на сервер '
-          'подключим следующим этапом.',
-        ),
-      ),
-    );
+  Future<void> _checkAdminAccess() async {
+    if (selectedFile == null || isChecking) {
+      return;
+    }
+
+    setState(() {
+      isChecking = true;
+    });
+
+    try {
+      final Map<String, dynamic> result =
+          await AdminApiService.checkAdminAccess();
+
+      debugPrint('Ответ Admin API: $result');
+
+      if (!mounted) {
+        return;
+      }
+
+      final String message =
+          result['message']?.toString() ?? 'Администратор авторизован';
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      debugPrint('Ошибка Admin API: $e');
+
+      if (!mounted) {
+        return;
+      }
+
+      String message = e.toString();
+
+      if (message.startsWith('Exception: ')) {
+        message = message.substring('Exception: '.length);
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          isChecking = false;
+        });
+      }
+    }
   }
 
   @override
@@ -86,7 +125,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 
               const SizedBox(height: 28),
 
-              _UploadCard(onTap: _pickPdf),
+              _UploadCard(onTap: isChecking ? null : _pickPdf),
 
               if (selectedFile != null) ...[
                 const SizedBox(height: 20),
@@ -97,7 +136,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 
                 _SelectedFileCard(
                   fileName: selectedFile!.name,
-                  onRemove: _removeSelectedFile,
+                  onRemove: isChecking ? null : _removeSelectedFile,
                 ),
 
                 const SizedBox(height: 24),
@@ -105,9 +144,22 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _showNotConnectedMessage,
-                    icon: const Icon(Icons.cloud_upload_rounded),
-                    label: const Text('Проверить расписание'),
+                    onPressed: isChecking ? null : _checkAdminAccess,
+                    icon: isChecking
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.verified_user_rounded),
+                    label: Text(
+                      isChecking
+                          ? 'Проверяем доступ...'
+                          : 'Проверить расписание',
+                    ),
                   ),
                 ),
               ],
@@ -172,7 +224,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
 class _UploadCard extends StatelessWidget {
   const _UploadCard({required this.onTap});
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +283,7 @@ class _SelectedFileCard extends StatelessWidget {
   const _SelectedFileCard({required this.fileName, required this.onRemove});
 
   final String fileName;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
