@@ -8,6 +8,7 @@ import '../../app/brand.dart';
 import '../../app/theme.dart';
 import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
+import '../teacher/teacher_home_screen.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
   const VerifyEmailScreen({super.key});
@@ -70,10 +71,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
       timer?.cancel();
 
-      // После подтверждения Email принудительно
-      // обновляем Firebase ID token.
-      // Firestore Rules проверяют email_verified
-      // именно внутри этого токена.
       await refreshedUser.getIdToken(true);
 
       debugPrint(
@@ -140,23 +137,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           return;
 
         case 'teacher':
-          await FirebaseAuth.instance.signOut();
-
-          if (!mounted) {
-            return;
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Email подтверждён. '
-                'Интерфейс преподавателя '
-                'будет добавлен позже',
-              ),
-            ),
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const TeacherHomeScreen()),
+            (route) => false,
           );
-
-          Navigator.of(context).popUntil((route) => route.isFirst);
 
           return;
 
@@ -170,8 +154,6 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Неизвестная роль пользователя')),
           );
-
-          Navigator.of(context).popUntil((route) => route.isFirst);
 
           return;
       }
@@ -214,7 +196,10 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         ),
       );
     } catch (e) {
-      debugPrint('Неизвестная ошибка проверки Email: $e');
+      debugPrint(
+        'Неизвестная ошибка проверки '
+        'Email: $e',
+      );
 
       if (!mounted) {
         return;
@@ -360,9 +345,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 height: 66,
                 fit: BoxFit.contain,
               ),
-
               const SizedBox(height: 28),
-
               Container(
                 width: 72,
                 height: 72,
@@ -376,17 +359,13 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   color: AppTheme.primaryBlue,
                 ),
               ),
-
               const SizedBox(height: 24),
-
               const Text(
                 'Подтвердите почту',
                 textAlign: TextAlign.center,
                 style: AppTheme.pageTitle,
               ),
-
               const SizedBox(height: 10),
-
               const Text(
                 'Мы отправили письмо с '
                 'подтверждением для доступа '
@@ -394,9 +373,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 textAlign: TextAlign.center,
                 style: AppTheme.secondaryBodyText,
               ),
-
               const SizedBox(height: 22),
-
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -421,9 +398,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                         size: 22,
                       ),
                     ),
-
                     const SizedBox(width: 14),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,9 +407,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                             'Письмо отправлено на',
                             style: AppTheme.labelText,
                           ),
-
                           const SizedBox(height: 3),
-
                           Text(
                             user?.email ?? 'Email не указан',
                             style: AppTheme.cardTitle,
@@ -445,9 +418,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 22),
-
               const Text(
                 'Откройте письмо и перейдите '
                 'по ссылке подтверждения. '
@@ -456,9 +427,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                 textAlign: TextAlign.center,
                 style: AppTheme.secondaryBodyText,
               ),
-
               const SizedBox(height: 28),
-
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
@@ -474,9 +443,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                       height: 22,
                       child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
-
                     SizedBox(width: 14),
-
                     Text(
                       'Ожидаем подтверждение...',
                       style: AppTheme.secondaryBodyText,
@@ -484,9 +451,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 28),
-
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -495,9 +460,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   label: const Text('Я подтвердил почту'),
                 ),
               ),
-
               const SizedBox(height: 12),
-
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -519,9 +482,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                       : const Text('Отправить письмо ещё раз'),
                 ),
               ),
-
               const SizedBox(height: 14),
-
               TextButton.icon(
                 onPressed: logout,
                 icon: const Icon(Icons.logout, size: 18),

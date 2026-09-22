@@ -6,6 +6,7 @@ import '../../app/brand.dart';
 import '../../app/theme.dart';
 import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
+import '../teacher/teacher_home_screen.dart';
 import 'start_screen.dart';
 import 'verify_email_screen.dart';
 
@@ -25,8 +26,6 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     try {
-      // Получаем актуальное состояние пользователя
-      // непосредственно из Firebase Auth.
       await user.reload();
 
       final User? refreshedUser = FirebaseAuth.instance.currentUser;
@@ -42,16 +41,10 @@ class _AuthGateState extends State<AuthGate> {
         '${refreshedUser.emailVerified}',
       );
 
-      // Неподтверждённого пользователя
-      // не допускаем к данным приложения.
       if (!refreshedUser.emailVerified) {
         return const VerifyEmailScreen();
       }
 
-      // Важно: reload() обновляет объект User,
-      // но Firestore Rules используют Firebase ID token.
-      // Поэтому после подтверждения Email принудительно
-      // получаем новый токен с email_verified = true.
       await refreshedUser.getIdToken(true);
 
       debugPrint(
@@ -103,11 +96,7 @@ class _AuthGateState extends State<AuthGate> {
           return const AdminHomeScreen();
 
         case 'teacher':
-          // Интерфейс преподавателя
-          // добавим следующим этапом.
-          await FirebaseAuth.instance.signOut();
-
-          return const StartScreen();
+          return const TeacherHomeScreen();
 
         default:
           debugPrint('Неизвестная роль пользователя: $role');

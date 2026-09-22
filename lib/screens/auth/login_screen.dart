@@ -6,6 +6,7 @@ import '../../app/brand.dart';
 import '../../app/theme.dart';
 import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
+import '../teacher/teacher_home_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'verify_email_screen.dart';
@@ -68,11 +69,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       debugPrint('Вход выполнен');
-
       debugPrint('UID: ${refreshedUser.uid}');
-
       debugPrint('Email: ${refreshedUser.email}');
-
       debugPrint(
         'Email подтверждён: '
         '${refreshedUser.emailVerified}',
@@ -90,6 +88,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
         return;
       }
+
+      await refreshedUser.getIdToken(true);
+
+      debugPrint(
+        'Firebase ID token обновлён '
+        'после входа',
+      );
 
       final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
@@ -137,19 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
 
         case 'teacher':
-          await FirebaseAuth.instance.signOut();
-
-          if (!mounted) {
-            return;
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Интерфейс преподавателя '
-                'будет добавлен позже',
-              ),
-            ),
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const TeacherHomeScreen()),
+            (route) => false,
           );
 
           return;
