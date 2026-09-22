@@ -16,11 +16,17 @@ class UserEditScreen extends StatefulWidget {
 class _UserEditScreenState extends State<UserEditScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _groupController;
-  late final TextEditingController _teacherController;
 
   late String _role;
 
   bool _isSaving = false;
+  bool _isLoadingTeachers = false;
+
+  String? _teachersError;
+
+  List<AdminTeacher> _teachers = <AdminTeacher>[];
+
+  AdminTeacher? _selectedTeacher;
 
   bool get _isCurrentUser {
     return FirebaseAuth.instance.currentUser?.uid == widget.user.uid;
@@ -38,10 +44,6 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
     _groupController = TextEditingController(text: widget.user.groupId ?? '');
 
-    _teacherController = TextEditingController(
-      text: widget.user.teacherId ?? '',
-    );
-
     final String? currentRole = widget.user.role;
 
     if (currentRole == 'admin' ||
@@ -51,13 +53,16 @@ class _UserEditScreenState extends State<UserEditScreen> {
     } else {
       _role = 'student';
     }
+
+    if (_role == 'teacher') {
+      _loadTeachers();
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _groupController.dispose();
-    _teacherController.dispose();
 
     super.dispose();
   }
@@ -94,6 +99,101 @@ class _UserEditScreenState extends State<UserEditScreen> {
     }
   }
 
+  Future<void> _loadTeachers() async {
+    if (_isLoadingTeachers) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingTeachers = true;
+      _teachersError = null;
+    });
+
+    try {
+      final List<AdminTeacher> teachers = await AdminApiService.getTeachers();
+
+      if (!mounted) {
+        return;
+      }
+
+      AdminTeacher? selectedTeacher;
+
+      final String? currentTeacherId = widget.user.teacherId;
+
+      if (currentTeacherId != null && currentTeacherId.isNotEmpty) {
+        for (final AdminTeacher teacher in teachers) {
+          if (teacher.teacherId == currentTeacherId) {
+            selectedTeacher = teacher;
+            break;
+          }
+        }
+      }
+
+      setState(() {
+        _teachers = teachers;
+        _selectedTeacher = selectedTeacher;
+        _isLoadingTeachers = false;
+      });
+    } on AdminApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _teachersError = error.message;
+        _isLoadingTeachers = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _teachersError =
+            'Не удалось загрузить '
+            'преподавателей: $error';
+
+        _isLoadingTeachers = false;
+      });
+    }
+  }
+
+  Future<void> _selectTeacher() async {
+    if (_isLoadingTeachers) {
+      return;
+    }
+
+    if (_teachers.isEmpty) {
+      await _loadTeachers();
+
+      if (!mounted || _teachers.isEmpty) {
+        return;
+      }
+    }
+
+    final AdminTeacher? teacher = await showModalBottomSheet<AdminTeacher>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return _TeacherSelectorSheet(
+          teachers: _teachers,
+          selectedTeacherId: _selectedTeacher?.teacherId,
+          currentUserUid: widget.user.uid,
+          currentTeacherId: widget.user.teacherId,
+        );
+      },
+    );
+
+    if (!mounted || teacher == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedTeacher = teacher;
+    });
+  }
+
   Future<void> _save() async {
     if (_isSaving) {
       return;
@@ -106,12 +206,30 @@ class _UserEditScreenState extends State<UserEditScreen> {
         : null;
 
     final String? teacherId = _role == 'teacher'
-        ? _normalizedText(_teacherController)
+        ? _selectedTeacher?.teacherId
         : null;
 
     if (_role == 'student' && groupId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Укажите учебную группу учащегося.')),
+        const SnackBar(
+          content: Text(
+            'Укажите учебную группу '
+            'учащегося.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (_role == 'teacher' && teacherId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Выберите преподавателя '
+            'для привязки аккаунта.',
+          ),
+        ),
       );
 
       return;
@@ -164,6 +282,24 @@ class _UserEditScreenState extends State<UserEditScreen> {
     }
   }
 
+  void _changeRole(String? value) {
+    if (value == null) {
+      return;
+    }
+
+    setState(() {
+      _role = value;
+
+      if (_role != 'teacher') {
+        _selectedTeacher = null;
+      }
+    });
+
+    if (value == 'teacher' && _teachers.isEmpty && !_isLoadingTeachers) {
+      _loadTeachers();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final String? email = widget.user.email;
@@ -191,7 +327,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
             const SizedBox(height: 24),
 
-            _FieldLabel(text: 'ФИО'),
+            const _FieldLabel(text: 'ФИО'),
 
             const SizedBox(height: 8),
 
@@ -203,7 +339,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
             const SizedBox(height: 20),
 
-            _FieldLabel(text: 'Email'),
+            const _FieldLabel(text: 'Email'),
 
             const SizedBox(height: 8),
 
@@ -214,7 +350,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
             const SizedBox(height: 20),
 
-            _FieldLabel(text: 'Роль'),
+            const _FieldLabel(text: 'Роль'),
 
             const SizedBox(height: 8),
 
@@ -229,17 +365,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
                 ),
                 DropdownMenuItem(value: 'admin', child: Text('Администратор')),
               ],
-              onChanged: _isCurrentAdmin
-                  ? null
-                  : (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-
-                      setState(() {
-                        _role = value;
-                      });
-                    },
+              onChanged: _isCurrentAdmin ? null : _changeRole,
             ),
 
             if (_isCurrentAdmin) ...[
@@ -247,8 +373,8 @@ class _UserEditScreenState extends State<UserEditScreen> {
 
               const Text(
                 'Роль собственного '
-                'административного аккаунта '
-                'изменить нельзя.',
+                'административного '
+                'аккаунта изменить нельзя.',
                 style: TextStyle(fontSize: 13, color: AppTheme.secondaryText),
               ),
             ],
@@ -256,7 +382,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
             if (_role == 'student') ...[
               const SizedBox(height: 20),
 
-              _FieldLabel(text: 'Учебная группа'),
+              const _FieldLabel(text: 'Учебная группа'),
 
               const SizedBox(height: 8),
 
@@ -270,22 +396,16 @@ class _UserEditScreenState extends State<UserEditScreen> {
             if (_role == 'teacher') ...[
               const SizedBox(height: 20),
 
-              _FieldLabel(text: 'ID преподавателя'),
+              const _FieldLabel(text: 'Преподаватель'),
 
               const SizedBox(height: 8),
 
-              TextField(
-                controller: _teacherController,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  hintText: 'ID документа преподавателя',
-                ),
-              ),
+              _buildTeacherSelector(),
             ],
 
             const SizedBox(height: 20),
 
-            _FieldLabel(text: 'UID'),
+            const _FieldLabel(text: 'UID'),
 
             const SizedBox(height: 8),
 
@@ -308,13 +428,172 @@ class _UserEditScreenState extends State<UserEditScreen> {
                       )
                     : const Icon(Icons.save_rounded),
                 label: Text(
-                  _isSaving ? 'Сохранение...' : 'Сохранить изменения',
+                  _isSaving
+                      ? 'Сохранение...'
+                      : 'Сохранить '
+                            'изменения',
                 ),
               ),
             ),
 
             const SizedBox(height: 24),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherSelector() {
+    if (_isLoadingTeachers) {
+      return Container(
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Загрузка '
+              'преподавателей...',
+              style: TextStyle(color: AppTheme.secondaryText),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_teachersError != null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: AppTheme.secondaryText,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _teachersError!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _loadTeachers,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Повторить'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final AdminTeacher? teacher = _selectedTeacher;
+
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: _selectTeacher,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.school_rounded,
+                  color: AppTheme.primaryBlue,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: teacher == null
+                    ? const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Выбрать '
+                            'преподавателя',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryText,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Нажмите, чтобы '
+                            'открыть список',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.secondaryText,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            teacher.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            teacher.teacherId,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.secondaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.secondaryText,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -371,6 +650,341 @@ class _UserEditScreenState extends State<UserEditScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TeacherSelectorSheet extends StatefulWidget {
+  const _TeacherSelectorSheet({
+    required this.teachers,
+    required this.selectedTeacherId,
+    required this.currentUserUid,
+    required this.currentTeacherId,
+  });
+
+  final List<AdminTeacher> teachers;
+  final String? selectedTeacherId;
+  final String currentUserUid;
+  final String? currentTeacherId;
+
+  @override
+  State<_TeacherSelectorSheet> createState() => _TeacherSelectorSheetState();
+}
+
+class _TeacherSelectorSheetState extends State<_TeacherSelectorSheet> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+
+    _searchController.dispose();
+
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {});
+  }
+
+  bool _isAvailable(AdminTeacher teacher) {
+    if (!teacher.linked) {
+      return true;
+    }
+
+    if (teacher.userUid == widget.currentUserUid) {
+      return true;
+    }
+
+    if (teacher.teacherId == widget.currentTeacherId) {
+      return true;
+    }
+
+    return false;
+  }
+
+  List<AdminTeacher> get _filteredTeachers {
+    final String query = _searchController.text.trim().toLowerCase();
+
+    final List<AdminTeacher> result = widget.teachers.where((
+      AdminTeacher teacher,
+    ) {
+      if (query.isEmpty) {
+        return true;
+      }
+
+      final String groups = teacher.groupIds.join(' ').toLowerCase();
+
+      final String department = (teacher.department ?? '').toLowerCase();
+
+      return teacher.name.toLowerCase().contains(query) ||
+          teacher.teacherId.toLowerCase().contains(query) ||
+          groups.contains(query) ||
+          department.contains(query);
+    }).toList();
+
+    result.sort((AdminTeacher first, AdminTeacher second) {
+      final bool firstAvailable = _isAvailable(first);
+
+      final bool secondAvailable = _isAvailable(second);
+
+      if (firstAvailable != secondAvailable) {
+        return firstAvailable ? -1 : 1;
+      }
+
+      return first.name.toLowerCase().compareTo(second.name.toLowerCase());
+    });
+
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<AdminTeacher> teachers = _filteredTeachers;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.82,
+      minChildSize: 0.55,
+      maxChildSize: 0.94,
+      builder: (BuildContext context, ScrollController scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppTheme.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryText.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Выбор '
+                        'преподавателя',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.primaryText,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: false,
+                  decoration: InputDecoration(
+                    hintText:
+                        'Поиск по ФИО '
+                        'или группе',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              Expanded(
+                child: teachers.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Преподаватели '
+                            'не найдены.',
+                            textAlign: TextAlign.center,
+                            style: AppTheme.secondaryBodyText,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
+                        itemCount: teachers.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (BuildContext context, int index) {
+                          final AdminTeacher teacher = teachers[index];
+
+                          final bool available = _isAvailable(teacher);
+
+                          final bool selected =
+                              teacher.teacherId == widget.selectedTeacherId;
+
+                          return _TeacherOption(
+                            teacher: teacher,
+                            available: available,
+                            selected: selected,
+                            onTap: available
+                                ? () {
+                                    Navigator.of(context).pop(teacher);
+                                  }
+                                : null,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TeacherOption extends StatelessWidget {
+  const _TeacherOption({
+    required this.teacher,
+    required this.available,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AdminTeacher teacher;
+  final bool available;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? AppTheme.primaryBlue.withValues(alpha: 0.10)
+          : AppTheme.card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Opacity(
+          opacity: available ? 1 : 0.5,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    color: AppTheme.primaryBlue,
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        teacher.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryText,
+                        ),
+                      ),
+
+                      if (teacher.groupIds.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          teacher.groupIds.join(', '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.secondaryText,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        available
+                            ? teacher.linked
+                                  ? 'Текущая '
+                                        'привязка'
+                                  : 'Аккаунт '
+                                        'не привязан'
+                            : 'Уже привязан '
+                                  'к другому '
+                                  'аккаунту',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: available
+                              ? AppTheme.primaryBlue
+                              : AppTheme.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                if (selected)
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppTheme.primaryBlue,
+                  )
+                else
+                  Icon(
+                    available
+                        ? Icons.chevron_right_rounded
+                        : Icons.lock_outline_rounded,
+                    color: AppTheme.secondaryText,
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
