@@ -1,24 +1,22 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
 import '../../app/theme.dart';
+import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
-  const VerifyEmailScreen({
-    super.key,
-  });
+  const VerifyEmailScreen({super.key});
 
   @override
-  State<VerifyEmailScreen> createState() =>
-      _VerifyEmailScreenState();
+  State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
 }
 
-class _VerifyEmailScreenState
-    extends State<VerifyEmailScreen> {
+class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
   Timer? timer;
 
   bool isChecking = false;
@@ -28,12 +26,9 @@ class _VerifyEmailScreenState
   void initState() {
     super.initState();
 
-    timer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) {
-        checkEmailVerification();
-      },
-    );
+    timer = Timer.periodic(const Duration(seconds: 3), (_) {
+      checkEmailVerification();
+    });
   }
 
   @override
@@ -50,8 +45,7 @@ class _VerifyEmailScreenState
     isChecking = true;
 
     try {
-      final User? user =
-          FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
@@ -59,8 +53,7 @@ class _VerifyEmailScreenState
 
       await user.reload();
 
-      final User? refreshedUser =
-          FirebaseAuth.instance.currentUser;
+      final User? refreshedUser = FirebaseAuth.instance.currentUser;
 
       if (refreshedUser == null) {
         return;
@@ -71,37 +64,158 @@ class _VerifyEmailScreenState
         '${refreshedUser.emailVerified}',
       );
 
-      if (refreshedUser.emailVerified) {
-        timer?.cancel();
+      if (!refreshedUser.emailVerified) {
+        return;
+      }
+
+      timer?.cancel();
+
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(refreshedUser.uid)
+              .get();
+
+      if (!userDocument.exists) {
+        await FirebaseAuth.instance.signOut();
 
         if (!mounted) {
           return;
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Email успешно подтверждён',
-            ),
-          ),
+          const SnackBar(content: Text('Профиль пользователя не найден')),
         );
 
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) =>
-                const StudentHomeScreen(),
-          ),
-          (route) => false,
-        );
+        return;
+      }
+
+      final Map<String, dynamic>? userData = userDocument.data();
+
+      if (userData == null) {
+        throw Exception('Не удалось получить данные профиля');
+      }
+
+      final String? role = userData['role'] as String?;
+
+      debugPrint(
+        'Email подтверждён. '
+        'Роль пользователя: $role',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email успешно подтверждён')),
+      );
+
+      switch (role) {
+        case 'student':
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const StudentHomeScreen()),
+            (route) => false,
+          );
+
+          return;
+
+        case 'admin':
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AdminHomeScreen()),
+            (route) => false,
+          );
+
+          return;
+
+        case 'teacher':
+          await FirebaseAuth.instance.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Email подтверждён. '
+                'Интерфейс преподавателя '
+                'будет добавлен позже',
+              ),
+            ),
+          );
+
+          Navigator.of(context).popUntil((route) => route.isFirst);
+
+          return;
+
+        default:
+          await FirebaseAuth.instance.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Неизвестная роль пользователя')),
+          );
+
+          Navigator.of(context).popUntil((route) => route.isFirst);
+
+          return;
       }
     } on FirebaseAuthException catch (e) {
       debugPrint(
         'Ошибка проверки Email: '
         '${e.code} - ${e.message}',
       );
-    } catch (e) {
+
+      if (!mounted) {
+        return;
+      }
+
+      if (e.code == 'network-request-failed') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Не удалось проверить Email. '
+              'Проверьте интернет',
+            ),
+          ),
+        );
+      }
+    } on FirebaseException catch (e) {
       debugPrint(
-        'Неизвестная ошибка проверки Email: $e',
+        'Ошибка загрузки профиля: '
+        '${e.code} - ${e.message}',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Не удалось загрузить профиль: '
+            '${e.code}',
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Неизвестная ошибка проверки Email: $e');
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Не удалось завершить '
+            'подтверждение Email',
+          ),
+        ),
       );
     } finally {
       isChecking = false;
@@ -118,10 +232,14 @@ class _VerifyEmailScreenState
     });
 
     try {
-      final User? user =
-          FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
+        return;
+      }
+
+      if (user.emailVerified) {
+        await checkEmailVerification();
         return;
       }
 
@@ -137,11 +255,7 @@ class _VerifyEmailScreenState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Письмо отправлено повторно',
-          ),
-        ),
+        const SnackBar(content: Text('Письмо отправлено повторно')),
       );
     } on FirebaseAuthException catch (e) {
       debugPrint(
@@ -174,11 +288,8 @@ class _VerifyEmailScreenState
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       debugPrint(
         'Неизвестная ошибка повторной '
@@ -190,11 +301,7 @@ class _VerifyEmailScreenState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Произошла неизвестная ошибка',
-          ),
-        ),
+        const SnackBar(content: Text('Произошла неизвестная ошибка')),
       );
     } finally {
       if (mounted) {
@@ -214,21 +321,16 @@ class _VerifyEmailScreenState
       return;
     }
 
-    Navigator.of(context).popUntil(
-      (route) => route.isFirst,
-    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
-    final User? user =
-        FirebaseAuth.instance.currentUser;
+    final User? user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Подтверждение почты',
-        ),
+        title: const Text('Подтверждение почты'),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -254,12 +356,8 @@ class _VerifyEmailScreenState
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(
-                    alpha: 0.15,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    20,
-                  ),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Icon(
                   Icons.mark_email_unread_outlined,
@@ -290,14 +388,10 @@ class _VerifyEmailScreenState
 
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(
-                  16,
-                ),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppTheme.card,
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.cardRadius,
-                  ),
+                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                 ),
                 child: Row(
                   children: [
@@ -305,12 +399,8 @@ class _VerifyEmailScreenState
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue
-                            .withValues(
-                          alpha: 0.15,
-                        ),
-                        borderRadius:
-                            BorderRadius.circular(
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(
                           AppTheme.smallRadius,
                         ),
                       ),
@@ -325,8 +415,7 @@ class _VerifyEmailScreenState
 
                     Expanded(
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Письмо отправлено на',
@@ -336,8 +425,7 @@ class _VerifyEmailScreenState
                           const SizedBox(height: 3),
 
                           Text(
-                            user?.email ??
-                                'Email не указан',
+                            user?.email ?? 'Email не указан',
                             style: AppTheme.cardTitle,
                           ),
                         ],
@@ -362,33 +450,25 @@ class _VerifyEmailScreenState
 
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(
-                  18,
-                ),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: AppTheme.card,
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.cardRadius,
-                  ),
+                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                 ),
                 child: const Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     SizedBox(
                       width: 22,
                       height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
 
                     SizedBox(width: 14),
 
                     Text(
                       'Ожидаем подтверждение...',
-                      style:
-                          AppTheme.secondaryBodyText,
+                      style: AppTheme.secondaryBodyText,
                     ),
                   ],
                 ),
@@ -399,14 +479,9 @@ class _VerifyEmailScreenState
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed:
-                      checkEmailVerification,
-                  icon: const Icon(
-                    Icons.refresh,
-                  ),
-                  label: const Text(
-                    'Я подтвердил почту',
-                  ),
+                  onPressed: checkEmailVerification,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Я подтвердил почту'),
                 ),
               ),
 
@@ -416,34 +491,21 @@ class _VerifyEmailScreenState
                 width: double.infinity,
                 height: 52,
                 child: OutlinedButton(
-                  onPressed: isSending
-                      ? null
-                      : resendVerificationEmail,
+                  onPressed: isSending ? null : resendVerificationEmail,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor:
-                        AppTheme.primaryBlue,
-                    side: const BorderSide(
-                      color: AppTheme.primaryBlue,
-                    ),
+                    foregroundColor: AppTheme.primaryBlue,
+                    side: const BorderSide(color: AppTheme.primaryBlue),
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        AppTheme.cardRadius,
-                      ),
+                      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                     ),
                   ),
                   child: isSending
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text(
-                          'Отправить письмо ещё раз',
-                        ),
+                      : const Text('Отправить письмо ещё раз'),
                 ),
               ),
 
@@ -451,13 +513,8 @@ class _VerifyEmailScreenState
 
               TextButton.icon(
                 onPressed: logout,
-                icon: const Icon(
-                  Icons.logout,
-                  size: 18,
-                ),
-                label: const Text(
-                  'Выйти из аккаунта',
-                ),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Выйти из аккаунта'),
               ),
             ],
           ),
