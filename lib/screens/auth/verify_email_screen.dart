@@ -70,6 +70,17 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
 
       timer?.cancel();
 
+      // После подтверждения Email принудительно
+      // обновляем Firebase ID token.
+      // Firestore Rules проверяют email_verified
+      // именно внутри этого токена.
+      await refreshedUser.getIdToken(true);
+
+      debugPrint(
+        'Firebase ID token обновлён '
+        'после подтверждения Email',
+      );
+
       final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
               .collection('users')

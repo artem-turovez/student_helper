@@ -25,6 +25,8 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     try {
+      // Получаем актуальное состояние пользователя
+      // непосредственно из Firebase Auth.
       await user.reload();
 
       final User? refreshedUser = FirebaseAuth.instance.currentUser;
@@ -33,9 +35,29 @@ class _AuthGateState extends State<AuthGate> {
         return const StartScreen();
       }
 
+      debugPrint('Проверка автоматического входа');
+      debugPrint('UID: ${refreshedUser.uid}');
+      debugPrint(
+        'Email подтверждён: '
+        '${refreshedUser.emailVerified}',
+      );
+
+      // Неподтверждённого пользователя
+      // не допускаем к данным приложения.
       if (!refreshedUser.emailVerified) {
         return const VerifyEmailScreen();
       }
+
+      // Важно: reload() обновляет объект User,
+      // но Firestore Rules используют Firebase ID token.
+      // Поэтому после подтверждения Email принудительно
+      // получаем новый токен с email_verified = true.
+      await refreshedUser.getIdToken(true);
+
+      debugPrint(
+        'Firebase ID token обновлён '
+        'перед загрузкой Firestore',
+      );
 
       final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
@@ -44,6 +66,11 @@ class _AuthGateState extends State<AuthGate> {
               .get();
 
       if (!userDocument.exists) {
+        debugPrint(
+          'Профиль пользователя в Firestore '
+          'не найден',
+        );
+
         await FirebaseAuth.instance.signOut();
 
         return const StartScreen();
@@ -52,6 +79,11 @@ class _AuthGateState extends State<AuthGate> {
       final Map<String, dynamic>? userData = userDocument.data();
 
       if (userData == null) {
+        debugPrint(
+          'Профиль пользователя '
+          'не содержит данных',
+        );
+
         await FirebaseAuth.instance.signOut();
 
         return const StartScreen();
@@ -71,13 +103,35 @@ class _AuthGateState extends State<AuthGate> {
           return const AdminHomeScreen();
 
         case 'teacher':
+          // Интерфейс преподавателя
+          // добавим следующим этапом.
+          await FirebaseAuth.instance.signOut();
+
           return const StartScreen();
 
         default:
+          debugPrint('Неизвестная роль пользователя: $role');
+
           await FirebaseAuth.instance.signOut();
 
           return const StartScreen();
       }
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'Firebase Auth ошибка '
+        'автоматического входа: '
+        '${e.code} - ${e.message}',
+      );
+
+      return const StartScreen();
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Firestore ошибка '
+        'автоматического входа: '
+        '${e.code} - ${e.message}',
+      );
+
+      return const StartScreen();
     } catch (e) {
       debugPrint('Ошибка автоматического входа: $e');
 
