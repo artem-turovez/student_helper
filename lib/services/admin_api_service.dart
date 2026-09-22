@@ -61,6 +61,45 @@ class ScheduleCheckResult {
   }
 }
 
+class SchedulePublishResult {
+  const SchedulePublishResult({
+    required this.status,
+    required this.message,
+    required this.fileName,
+    required this.date,
+    required this.lessonCount,
+    required this.previousLessonCount,
+    required this.deletedLessonCount,
+    required this.teachersCreated,
+    required this.teachersUpdated,
+  });
+
+  final String status;
+  final String message;
+  final String fileName;
+  final String date;
+
+  final int lessonCount;
+  final int previousLessonCount;
+  final int deletedLessonCount;
+  final int teachersCreated;
+  final int teachersUpdated;
+
+  factory SchedulePublishResult.fromJson(Map<String, dynamic> json) {
+    return SchedulePublishResult(
+      status: json['status'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      fileName: json['fileName'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      lessonCount: json['lessonCount'] as int? ?? 0,
+      previousLessonCount: json['previousLessonCount'] as int? ?? 0,
+      deletedLessonCount: json['deletedLessonCount'] as int? ?? 0,
+      teachersCreated: json['teachersCreated'] as int? ?? 0,
+      teachersUpdated: json['teachersUpdated'] as int? ?? 0,
+    );
+  }
+}
+
 class AdminApiService {
   static const String _baseUrl = 'http://127.0.0.1:8000';
 
@@ -98,17 +137,41 @@ class AdminApiService {
   }
 
   static Future<ScheduleCheckResult> checkSchedule(PlatformFile file) async {
+    final Map<String, dynamic> data = await _sendPdf(
+      endpoint: '/schedule/check',
+      file: file,
+    );
+
+    return ScheduleCheckResult.fromJson(data);
+  }
+
+  static Future<SchedulePublishResult> publishSchedule(
+    PlatformFile file,
+  ) async {
+    final Map<String, dynamic> data = await _sendPdf(
+      endpoint: '/schedule/publish',
+      file: file,
+    );
+
+    return SchedulePublishResult.fromJson(data);
+  }
+
+  static Future<Map<String, dynamic>> _sendPdf({
+    required String endpoint,
+    required PlatformFile file,
+  }) async {
     final String? filePath = file.path;
 
     if (filePath == null || filePath.isEmpty) {
       throw const AdminApiException(
-        'Не удалось получить путь к выбранному PDF-файлу.',
+        'Не удалось получить путь '
+        'к выбранному PDF-файлу.',
       );
     }
 
     final String token = await _getIdToken();
 
-    final Uri uri = Uri.parse('$_baseUrl/schedule/check');
+    final Uri uri = Uri.parse('$_baseUrl$endpoint');
 
     final http.MultipartRequest request = http.MultipartRequest('POST', uri);
 
@@ -133,11 +196,14 @@ class AdminApiService {
         );
       }
 
-      return ScheduleCheckResult.fromJson(data);
+      return data;
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось подключиться к серверу: $error');
+      throw AdminApiException(
+        'Не удалось подключиться '
+        'к серверу: $error',
+      );
     }
   }
 
@@ -152,8 +218,9 @@ class AdminApiService {
       throw const FormatException();
     } catch (_) {
       throw AdminApiException(
-        'Сервер вернул некорректный ответ '
-        '(HTTP ${response.statusCode}).',
+        'Сервер вернул некорректный '
+        'ответ (HTTP '
+        '${response.statusCode}).',
       );
     }
   }
@@ -168,6 +235,7 @@ class AdminApiService {
       return detail;
     }
 
-    return 'Ошибка сервера (HTTP $statusCode).';
+    return 'Ошибка сервера '
+        '(HTTP $statusCode).';
   }
 }

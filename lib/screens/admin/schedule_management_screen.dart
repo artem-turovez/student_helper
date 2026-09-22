@@ -14,9 +14,14 @@ class ScheduleManagementScreen extends StatefulWidget {
 
 class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
   PlatformFile? selectedFile;
+
   ScheduleCheckResult? checkResult;
+  SchedulePublishResult? publishResult;
 
   bool isChecking = false;
+  bool isPublishing = false;
+
+  bool get isBusy => isChecking || isPublishing;
 
   Future<void> _pickPdf() async {
     try {
@@ -32,6 +37,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
       setState(() {
         selectedFile = file;
         checkResult = null;
+        publishResult = null;
       });
     } catch (e) {
       debugPrint('Ошибка выбора PDF: $e');
@@ -47,22 +53,28 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
   }
 
   void _removeSelectedFile() {
+    if (isBusy) {
+      return;
+    }
+
     setState(() {
       selectedFile = null;
       checkResult = null;
+      publishResult = null;
     });
   }
 
   Future<void> _checkSchedule() async {
     final PlatformFile? file = selectedFile;
 
-    if (file == null || isChecking) {
+    if (file == null || isBusy) {
       return;
     }
 
     setState(() {
       isChecking = true;
       checkResult = null;
+      publishResult = null;
     });
 
     try {
@@ -78,17 +90,16 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
         checkResult = result;
       });
 
-      if (result.auditPassed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Расписание успешно проверено')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('При проверке расписания обнаружены проблемы'),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.auditPassed
+                ? 'Расписание успешно проверено'
+                : 'При проверке расписания '
+                      'обнаружены проблемы',
           ),
-        );
-      }
+        ),
+      );
     } on AdminApiException catch (e) {
       if (!mounted) {
         return;
@@ -104,7 +115,12 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось проверить расписание')),
+        const SnackBar(
+          content: Text(
+            'Не удалось проверить '
+            'расписание',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -113,6 +129,130 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
         });
       }
     }
+  }
+
+  Future<void> _requestPublish() async {
+    final PlatformFile? file = selectedFile;
+
+    final ScheduleCheckResult? result = checkResult;
+
+    if (file == null || result == null || !result.auditPassed || isBusy) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Опубликовать расписание?'),
+          content: Text(
+            'Расписание на '
+            '${_formatDate(result.date)} '
+            'будет записано в Firestore.\n\n'
+            'Занятий: '
+            '${result.lessonCount}\n'
+            'Групп: '
+            '${result.groupCount}\n\n'
+            'Если расписание на эту дату '
+            'уже существует, оно будет '
+            'обновлено.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Опубликовать'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await _publishSchedule(file);
+  }
+
+  Future<void> _publishSchedule(PlatformFile file) async {
+    setState(() {
+      isPublishing = true;
+      publishResult = null;
+    });
+
+    try {
+      final SchedulePublishResult result =
+          await AdminApiService.publishSchedule(file);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        publishResult = result;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.message.isEmpty ? 'Расписание опубликовано' : result.message,
+          ),
+        ),
+      );
+    } on AdminApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      debugPrint(
+        'Ошибка публикации '
+        'расписания: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Не удалось опубликовать '
+            'расписание',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isPublishing = false;
+        });
+      }
+    }
+  }
+
+  String _formatDate(String value) {
+    final DateTime? date = DateTime.tryParse(value);
+
+    if (date == null) {
+      return value.isEmpty ? 'неизвестную дату' : value;
+    }
+
+    final String day = date.day.toString().padLeft(2, '0');
+
+    final String month = date.month.toString().padLeft(2, '0');
+
+    return '$day.$month.${date.year}';
   }
 
   @override
@@ -126,7 +266,9 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Расписание', style: AppTheme.pageTitle),
+
               const SizedBox(height: 8),
+
               const Text(
                 'Загрузите PDF-файл '
                 'с расписанием колледжа. '
@@ -134,18 +276,21 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                 'будут проверены.',
                 style: AppTheme.secondaryBodyText,
               ),
+
               const SizedBox(height: 28),
 
-              _UploadCard(onTap: isChecking ? null : _pickPdf),
+              _UploadCard(onTap: isBusy ? null : _pickPdf),
 
               if (selectedFile != null) ...[
                 const SizedBox(height: 20),
+
                 const Text('Выбранный файл', style: AppTheme.sectionTitle),
+
                 const SizedBox(height: 12),
 
                 _SelectedFileCard(
                   fileName: selectedFile!.name,
-                  onRemove: isChecking ? null : _removeSelectedFile,
+                  onRemove: isBusy ? null : _removeSelectedFile,
                 ),
 
                 const SizedBox(height: 24),
@@ -153,7 +298,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: isChecking ? null : _checkSchedule,
+                    onPressed: isBusy ? null : _checkSchedule,
                     icon: isChecking
                         ? const SizedBox(
                             width: 20,
@@ -175,6 +320,38 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                 const SizedBox(height: 28),
 
                 _CheckResultCard(result: checkResult!),
+
+                if (checkResult!.auditPassed) ...[
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: isBusy ? null : _requestPublish,
+                      icon: isPublishing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.cloud_upload_rounded),
+                      label: Text(
+                        isPublishing
+                            ? 'Публикуем...'
+                            : 'Опубликовать расписание',
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+
+              if (publishResult != null) ...[
+                const SizedBox(height: 28),
+
+                _PublishResultCard(result: publishResult!),
               ],
 
               const SizedBox(height: 32),
@@ -183,6 +360,7 @@ class _ScheduleManagementScreenState extends State<ScheduleManagementScreen> {
                 'Как это будет работать',
                 style: AppTheme.sectionTitle,
               ),
+
               const SizedBox(height: 14),
 
               const _ProcessStep(
@@ -263,7 +441,9 @@ class _UploadCard extends StatelessWidget {
                   color: AppTheme.primaryBlue,
                 ),
               ),
+
               const SizedBox(height: 16),
+
               const Text(
                 'Выбрать PDF-файл',
                 style: TextStyle(
@@ -272,7 +452,9 @@ class _UploadCard extends StatelessWidget {
                   color: AppTheme.primaryText,
                 ),
               ),
+
               const SizedBox(height: 6),
+
               const Text(
                 'Нажмите, чтобы выбрать '
                 'расписание на устройстве',
@@ -315,7 +497,9 @@ class _SelectedFileCard extends StatelessWidget {
               color: AppTheme.primaryBlue,
             ),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,7 +515,9 @@ class _SelectedFileCard extends StatelessWidget {
               ],
             ),
           ),
+
           const SizedBox(width: 8),
+
           IconButton(
             onPressed: onRemove,
             tooltip: 'Удалить',
@@ -376,7 +562,9 @@ class _CheckResultCard extends StatelessWidget {
                 passed ? Icons.check_circle_rounded : Icons.error_rounded,
                 color: passed ? AppTheme.success : AppTheme.danger,
               ),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: Text(
                   passed ? 'Проверка пройдена' : 'Обнаружены проблемы',
@@ -422,9 +610,7 @@ class _CheckResultCard extends StatelessWidget {
 
           if (result.issues.isNotEmpty) ...[
             const SizedBox(height: 20),
-
             const Divider(),
-
             const SizedBox(height: 12),
 
             const Text('Найденные проблемы', style: AppTheme.cardTitle),
@@ -445,7 +631,9 @@ class _CheckResultCard extends StatelessWidget {
                         color: AppTheme.danger,
                       ),
                     ),
+
                     const SizedBox(width: 8),
+
                     Expanded(
                       child: Text(issue, style: AppTheme.secondaryBodyText),
                     ),
@@ -454,6 +642,83 @@ class _CheckResultCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PublishResultCard extends StatelessWidget {
+  const _PublishResultCard({required this.result});
+
+  final SchedulePublishResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.cloud_done_rounded, color: AppTheme.success),
+
+              SizedBox(width: 10),
+
+              Expanded(
+                child: Text(
+                  'Расписание опубликовано',
+                  style: AppTheme.sectionTitle,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          _ResultRow(title: 'Дата', value: result.date),
+
+          const SizedBox(height: 10),
+
+          _ResultRow(
+            title: 'Опубликовано занятий',
+            value: '${result.lessonCount}',
+          ),
+
+          const SizedBox(height: 10),
+
+          _ResultRow(
+            title: 'Занятий было до публикации',
+            value: '${result.previousLessonCount}',
+          ),
+
+          const SizedBox(height: 10),
+
+          _ResultRow(
+            title: 'Удалено устаревших',
+            value: '${result.deletedLessonCount}',
+          ),
+
+          const SizedBox(height: 10),
+
+          _ResultRow(
+            title: 'Добавлено преподавателей',
+            value: '${result.teachersCreated}',
+          ),
+
+          const SizedBox(height: 10),
+
+          _ResultRow(
+            title: 'Обновлено преподавателей',
+            value: '${result.teachersUpdated}',
+          ),
         ],
       ),
     );
@@ -471,7 +736,9 @@ class _ResultRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(title, style: AppTheme.secondaryBodyText)),
+
         const SizedBox(width: 12),
+
         Text(
           value,
           style: const TextStyle(
@@ -524,13 +791,17 @@ class _ProcessStep extends StatelessWidget {
               ),
             ),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: AppTheme.cardTitle),
+
                 const SizedBox(height: 4),
+
                 Text(description, style: AppTheme.secondaryBodyText),
               ],
             ),
