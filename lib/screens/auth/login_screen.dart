@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
 import '../../app/theme.dart';
+import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
@@ -13,18 +14,15 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() =>
-      _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  final TextEditingController emailController =
-      TextEditingController();
+  final TextEditingController emailController = TextEditingController();
 
-  final TextEditingController passwordController =
-      TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   bool isPasswordVisible = false;
   bool isLoading = false;
@@ -33,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+
     super.dispose();
   }
 
@@ -48,37 +47,32 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final UserCredential userCredential =
-          await FirebaseAuth.instance
-              .signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text,
-      );
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: emailController.text.trim(),
+            password: passwordController.text,
+          );
 
       final User? user = userCredential.user;
 
       if (user == null) {
-        throw Exception(
-          'Firebase не вернул пользователя',
-        );
+        throw Exception('Firebase не вернул пользователя');
       }
 
       await user.reload();
 
-      final User? refreshedUser =
-          FirebaseAuth.instance.currentUser;
+      final User? refreshedUser = FirebaseAuth.instance.currentUser;
 
       if (refreshedUser == null) {
-        throw Exception(
-          'Не удалось получить пользователя',
-        );
+        throw Exception('Не удалось получить пользователя');
       }
 
       debugPrint('Вход выполнен');
+
       debugPrint('UID: ${refreshedUser.uid}');
-      debugPrint(
-        'Email: ${refreshedUser.email}',
-      );
+
+      debugPrint('Email: ${refreshedUser.email}');
+
       debugPrint(
         'Email подтверждён: '
         '${refreshedUser.emailVerified}',
@@ -89,44 +83,37 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!refreshedUser.emailVerified) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) =>
-                const VerifyEmailScreen(),
-          ),
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const VerifyEmailScreen()),
+          (route) => false,
         );
 
         return;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          userDocument =
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(refreshedUser.uid)
               .get();
 
       if (!userDocument.exists) {
-        throw Exception(
-          'Профиль пользователя не найден',
-        );
+        await FirebaseAuth.instance.signOut();
+
+        throw Exception('Профиль пользователя не найден');
       }
 
-      final Map<String, dynamic>? userData =
-          userDocument.data();
+      final Map<String, dynamic>? userData = userDocument.data();
 
       if (userData == null) {
-        throw Exception(
-          'Не удалось получить данные профиля',
-        );
+        await FirebaseAuth.instance.signOut();
+
+        throw Exception('Не удалось получить данные профиля');
       }
 
-      final String? role =
-          userData['role'] as String?;
+      final String? role = userData['role'] as String?;
 
-      debugPrint(
-        'Роль пользователя: $role',
-      );
+      debugPrint('Роль пользователя: $role');
 
       if (!mounted) {
         return;
@@ -134,19 +121,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
       switch (role) {
         case 'student':
-          Navigator.of(context)
-              .pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (context) =>
-                  const StudentHomeScreen(),
-            ),
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const StudentHomeScreen()),
             (route) => false,
           );
-          break;
+
+          return;
+
+        case 'admin':
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AdminHomeScreen()),
+            (route) => false,
+          );
+
+          return;
 
         case 'teacher':
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
+          await FirebaseAuth.instance.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
                 'Интерфейс преподавателя '
@@ -154,29 +151,21 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           );
-          break;
 
-        case 'admin':
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Интерфейс администратора '
-                'будет добавлен позже',
-              ),
-            ),
-          );
-          break;
+          return;
 
         default:
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Неизвестная роль пользователя',
-              ),
-            ),
+          await FirebaseAuth.instance.signOut();
+
+          if (!mounted) {
+            return;
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Неизвестная роль пользователя')),
           );
+
+          return;
       }
     } on FirebaseAuthException catch (e) {
       debugPrint(
@@ -188,13 +177,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       switch (e.code) {
         case 'invalid-email':
-          message =
-              'Введите корректный Email';
+          message = 'Введите корректный Email';
           break;
 
         case 'user-disabled':
-          message =
-              'Этот аккаунт заблокирован';
+          message = 'Этот аккаунт заблокирован';
           break;
 
         case 'user-not-found':
@@ -208,8 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
 
         case 'invalid-credential':
-          message =
-              'Неверный Email или пароль';
+          message = 'Неверный Email или пароль';
           break;
 
         case 'too-many-requests':
@@ -234,11 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } on FirebaseException catch (e) {
       debugPrint(
         'Firestore login error: '
@@ -258,20 +241,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } catch (e) {
-      debugPrint(
-        'Неизвестная ошибка входа: $e',
-      );
+      debugPrint('Неизвестная ошибка входа: $e');
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Произошла неизвестная ошибка',
-          ),
-        ),
+        const SnackBar(content: Text('Произошла неизвестная ошибка')),
       );
     } finally {
       if (mounted) {
@@ -285,9 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Вход'),
-      ),
+      appBar: AppBar(title: const Text('Вход')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -299,8 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
                   child: Image.asset(
@@ -310,87 +284,53 @@ class _LoginScreenState extends State<LoginScreen> {
                     fit: BoxFit.contain,
                   ),
                 ),
-
                 const SizedBox(height: 28),
-
-                const Text(
-                  'С возвращением!',
-                  style: AppTheme.pageTitle,
-                ),
-
+                const Text('С возвращением!', style: AppTheme.pageTitle),
                 const SizedBox(height: 8),
-
                 const Text(
                   'Войдите в Помощник учащегося '
-                  'Минского радиотехнического колледжа.',
-                  style:
-                      AppTheme.secondaryBodyText,
+                  'Минского радиотехнического '
+                  'колледжа.',
+                  style: AppTheme.secondaryBodyText,
                 ),
-
                 const SizedBox(height: 30),
-
-                const Text(
-                  'Email',
-                  style: AppTheme.cardTitle,
-                ),
-
+                const Text('Email', style: AppTheme.cardTitle),
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: emailController,
-                  keyboardType:
-                      TextInputType.emailAddress,
-                  textInputAction:
-                      TextInputAction.next,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration:
-                      const InputDecoration(
-                    hintText:
-                        'example@mail.com',
-                    prefixIcon: Icon(
-                      Icons.email_outlined,
-                    ),
+                  decoration: const InputDecoration(
+                    hintText: 'example@mail.com',
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (value) {
-                    if (value == null ||
-                        value.trim().isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'Введите Email';
                     }
 
-                    final String email =
-                        value.trim();
+                    final String email = value.trim();
 
-                    final RegExp emailRegExp =
-                        RegExp(
+                    final RegExp emailRegExp = RegExp(
                       r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                     );
 
-                    if (!emailRegExp
-                        .hasMatch(email)) {
+                    if (!emailRegExp.hasMatch(email)) {
                       return 'Введите корректный Email';
                     }
 
                     return null;
                   },
                 ),
-
                 const SizedBox(height: 20),
-
-                const Text(
-                  'Пароль',
-                  style: AppTheme.cardTitle,
-                ),
-
+                const Text('Пароль', style: AppTheme.cardTitle),
                 const SizedBox(height: 8),
-
                 TextFormField(
-                  controller:
-                      passwordController,
-                  obscureText:
-                      !isPasswordVisible,
-                  textInputAction:
-                      TextInputAction.done,
+                  controller: passwordController,
+                  obscureText: !isPasswordVisible,
+                  textInputAction: TextInputAction.done,
                   autocorrect: false,
                   enableSuggestions: false,
                   onFieldSubmitted: (_) {
@@ -399,120 +339,88 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                   },
                   decoration: InputDecoration(
-                    hintText:
-                        'Введите пароль',
-                    prefixIcon: const Icon(
-                      Icons.lock_outline,
-                    ),
+                    hintText: 'Введите пароль',
+                    prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       onPressed: () {
                         setState(() {
-                          isPasswordVisible =
-                              !isPasswordVisible;
+                          isPasswordVisible = !isPasswordVisible;
                         });
                       },
                       icon: Icon(
                         isPasswordVisible
-                            ? Icons
-                                .visibility_off_outlined
-                            : Icons
-                                .visibility_outlined,
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
                       ),
                     ),
                   ),
                   validator: (value) {
-                    if (value == null ||
-                        value.isEmpty) {
+                    if (value == null || value.isEmpty) {
                       return 'Введите пароль';
                     }
 
                     if (value.length < 8) {
-                      return 'Пароль должен содержать '
-                          'минимум 8 символов';
+                      return 'Пароль должен '
+                          'содержать минимум '
+                          '8 символов';
                     }
 
                     return null;
                   },
                 ),
-
                 const SizedBox(height: 6),
-
                 Align(
-                  alignment:
-                      Alignment.centerRight,
+                  alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: isLoading
                         ? null
                         : () {
-                            Navigator.of(
-                              context,
-                            ).push(
+                            Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder:
-                                    (context) =>
-                                        const ForgotPasswordScreen(),
+                                builder: (context) =>
+                                    const ForgotPasswordScreen(),
                               ),
                             );
                           },
-                    child: const Text(
-                      'Забыли пароль?',
-                    ),
+                    child: const Text('Забыли пароль?'),
                   ),
                 ),
-
                 const SizedBox(height: 18),
-
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: isLoading
-                        ? null
-                        : loginUser,
+                    onPressed: isLoading ? null : loginUser,
                     child: isLoading
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child:
-                                CircularProgressIndicator(
+                            child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color:
-                                  Colors.white,
+                              color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Войти',
-                          ),
+                        : const Text('Войти'),
                   ),
                 ),
-
                 const SizedBox(height: 22),
-
                 Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text(
                       'Нет аккаунта?',
-                      style: AppTheme
-                          .secondaryBodyText,
+                      style: AppTheme.secondaryBodyText,
                     ),
                     TextButton(
                       onPressed: isLoading
                           ? null
                           : () {
-                              Navigator.of(
-                                context,
-                              ).push(
+                              Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder:
-                                      (context) =>
-                                          const RegisterScreen(),
+                                  builder: (context) => const RegisterScreen(),
                                 ),
                               );
                             },
-                      child: const Text(
-                        'Создать',
-                      ),
+                      child: const Text('Создать'),
                     ),
                   ],
                 ),

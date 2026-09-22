@@ -4,25 +4,21 @@ import 'package:flutter/material.dart';
 
 import '../../app/brand.dart';
 import '../../app/theme.dart';
+import '../admin/admin_home_screen.dart';
 import '../student/student_home_screen.dart';
 import 'start_screen.dart';
 import 'verify_email_screen.dart';
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({
-    super.key,
-  });
+  const AuthGate({super.key});
 
   @override
-  State<AuthGate> createState() =>
-      _AuthGateState();
+  State<AuthGate> createState() => _AuthGateState();
 }
 
 class _AuthGateState extends State<AuthGate> {
-  Future<Widget>
-      determineStartScreen() async {
-    final User? user =
-        FirebaseAuth.instance.currentUser;
+  Future<Widget> determineStartScreen() async {
+    final User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return const StartScreen();
@@ -31,8 +27,7 @@ class _AuthGateState extends State<AuthGate> {
     try {
       await user.reload();
 
-      final User? refreshedUser =
-          FirebaseAuth.instance.currentUser;
+      final User? refreshedUser = FirebaseAuth.instance.currentUser;
 
       if (refreshedUser == null) {
         return const StartScreen();
@@ -42,8 +37,7 @@ class _AuthGateState extends State<AuthGate> {
         return const VerifyEmailScreen();
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          userDocument =
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(refreshedUser.uid)
@@ -55,8 +49,7 @@ class _AuthGateState extends State<AuthGate> {
         return const StartScreen();
       }
 
-      final Map<String, dynamic>? userData =
-          userDocument.data();
+      final Map<String, dynamic>? userData = userDocument.data();
 
       if (userData == null) {
         await FirebaseAuth.instance.signOut();
@@ -64,39 +57,29 @@ class _AuthGateState extends State<AuthGate> {
         return const StartScreen();
       }
 
-      final String? role =
-          userData['role'] as String?;
+      final String? role = userData['role'] as String?;
 
-      debugPrint(
-        'Автоматический вход',
-      );
-      debugPrint(
-        'UID: ${refreshedUser.uid}',
-      );
-      debugPrint(
-        'Роль: $role',
-      );
+      debugPrint('Автоматический вход');
+      debugPrint('UID: ${refreshedUser.uid}');
+      debugPrint('Роль: $role');
 
       switch (role) {
         case 'student':
           return const StudentHomeScreen();
 
+        case 'admin':
+          return const AdminHomeScreen();
+
         case 'teacher':
           return const StartScreen();
 
-        case 'admin':
-          return const StartScreen();
-
         default:
-          await FirebaseAuth.instance
-              .signOut();
+          await FirebaseAuth.instance.signOut();
 
           return const StartScreen();
       }
     } catch (e) {
-      debugPrint(
-        'Ошибка автоматического входа: $e',
-      );
+      debugPrint('Ошибка автоматического входа: $e');
 
       return const StartScreen();
     }
@@ -107,8 +90,7 @@ class _AuthGateState extends State<AuthGate> {
     return FutureBuilder<Widget>(
       future: determineStartScreen(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const _AuthLoadingScreen();
         }
 
@@ -116,15 +98,13 @@ class _AuthGateState extends State<AuthGate> {
           return const StartScreen();
         }
 
-        return snapshot.data ??
-            const StartScreen();
+        return snapshot.data ?? const StartScreen();
       },
     );
   }
 }
 
-class _AuthLoadingScreen
-    extends StatelessWidget {
+class _AuthLoadingScreen extends StatelessWidget {
   const _AuthLoadingScreen();
 
   @override
@@ -134,12 +114,10 @@ class _AuthLoadingScreen
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal:
-                  AppTheme.screenPadding,
+              horizontal: AppTheme.screenPadding,
             ),
             child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(
                   AppBrand.logoPath,
@@ -147,53 +125,33 @@ class _AuthLoadingScreen
                   height: 95,
                   fit: BoxFit.contain,
                 ),
-
                 const SizedBox(height: 26),
-
                 const Text(
                   AppBrand.appName,
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 24,
-                    fontWeight:
-                        FontWeight.bold,
-                    color:
-                        AppTheme.primaryText,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryText,
                   ),
                 ),
-
                 const SizedBox(height: 7),
-
                 const Text(
                   AppBrand.collegeShortName,
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight:
-                        FontWeight.w600,
-                    color: AppTheme
-                        .secondaryText,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.secondaryText,
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
                 const SizedBox(
                   width: 30,
                   height: 30,
-                  child:
-                      CircularProgressIndicator(
-                    strokeWidth: 3,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 3),
                 ),
-
                 const SizedBox(height: 14),
-
-                const Text(
-                  'Загрузка...',
-                  style: AppTheme
-                      .secondaryBodyText,
-                ),
+                const Text('Загрузка...', style: AppTheme.secondaryBodyText),
               ],
             ),
           ),
