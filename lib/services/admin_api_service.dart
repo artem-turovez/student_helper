@@ -295,6 +295,57 @@ class AdminApiService {
     }
   }
 
+  static Future<AdminUser> createUser({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    required String? groupId,
+    required String? teacherId,
+  }) async {
+    final String token = await _getIdToken();
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse('$_baseUrl/admin/users'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'role': role,
+          'groupId': groupId,
+          'teacherId': teacherId,
+        }),
+      );
+
+      final Map<String, dynamic> data = _decodeResponse(response);
+
+      if (response.statusCode != 201) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+
+      final dynamic rawUser = data['user'];
+
+      if (rawUser is! Map) {
+        throw const AdminApiException(
+          'Сервер вернул некорректные данные пользователя.',
+        );
+      }
+
+      return AdminUser.fromJson(Map<String, dynamic>.from(rawUser));
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException('Не удалось создать пользователя: $error');
+    }
+  }
+
   static Future<List<AdminTeacher>> getTeachers() async {
     final String token = await _getIdToken();
 

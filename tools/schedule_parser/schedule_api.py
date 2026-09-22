@@ -56,7 +56,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.6.0",
+    version="1.7.0",
 )
 
 
@@ -585,13 +585,6 @@ async def update_admin_teacher(
             payload.department
         )
 
-        # Намеренно обновляем только
-        # редактируемые администратором поля.
-        #
-        # teacherId остаётся ID документа.
-        # groupIds формируется расписанием.
-        # Связь с аккаунтом хранится
-        # в users/<uid>.teacherId.
         update_data = {
             "name": name,
             "email": email,
@@ -654,6 +647,15 @@ async def update_admin_teacher(
         )
 
 
+class AdminUserCreateRequest(BaseModel):
+    name: str | None = None
+    email: str
+    password: str
+    role: str
+    groupId: str | None = None
+    teacherId: str | None = None
+
+
 class AdminUserUpdateRequest(BaseModel):
     name: str | None = None
     role: str
@@ -663,11 +665,15 @@ class AdminUserUpdateRequest(BaseModel):
 
 def validate_teacher_link(
     teacher_id: str,
-    user_uid: str,
+    user_uid: str | None = None,
 ) -> None:
     """
     Проверяет, что преподаватель существует
     и ещё не связан с другим аккаунтом.
+
+    user_uid используется при редактировании,
+    чтобы текущая привязка пользователя
+    не считалась конфликтом.
     """
 
     teacher_snapshot = (
@@ -698,7 +704,10 @@ def validate_teacher_link(
     )
 
     for linked_user in linked_users:
-        if linked_user.id != user_uid:
+        if (
+            user_uid is None
+            or linked_user.id != user_uid
+        ):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -707,6 +716,291 @@ def validate_teacher_link(
                     "аккаунту."
                 ),
             )
+
+
+def prepare_user_role_data(
+    role: str,
+    group_id: str | None,
+    teacher_id: str | None,
+    user_uid: str | None = None,
+) -> tuple[str, str | None, str | None]:
+    role = role.strip().lower()
+
+    allowed_roles = {
+        "student",
+        "teacher",
+        "admin",
+    }
+
+    if role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Недопустимая роль "
+                "пользователя."
+            ),
+        )
+
+    if role == "student":
+        teacher_id = None
+
+        if group_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Для учащегося "
+                    "необходимо указать "
+                    "учебную группу."
+                ),
+            )
+
+    elif role == "teacher":
+        group_id = None
+
+        if teacher_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Для роли преподавателя "
+                    "необходимо выбрать "
+                    "преподавателя."
+                ),
+            )
+
+        validate_teacher_link(
+            teacher_id,
+            user_uid,
+        )
+
+    elif role == "admin":
+        group_id = None
+        teacher_id = None
+
+    return (
+        role,
+        group_id,
+        teacher_id,
+    )
+
+
+@app.post(
+    "/admin/users",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_admin_user(
+    payload: AdminUserCreateRequest,
+    admin: dict = Depends(require_admin),
+) -> dict:
+    created_auth_uid: str | None = None
+
+    try:
+        name = normalize_optional_text(
+            payload.name
+        )
+
+        email = normalize_optional_text(
+            payload.email
+        )
+
+        password = payload.password
+
+        group_id = normalize_optional_text(
+            payload.groupId
+        )
+
+        teacher_id = normalize_optional_text(
+            payload.teacherId
+        )
+
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Необходимо указать "
+                    "email пользователя."
+                ),
+            )
+
+        email = email.lower()
+
+        if "@" not in email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Укажите корректный "
+                    "email пользователя."
+                ),
+            )
+
+        if not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Необходимо указать "
+                    "пароль."
+                ),
+            )
+
+        if len(password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Пароль должен содержать "
+                    "не менее 6 символов."
+                ),
+            )
+
+        (
+            role,
+            group_id,
+            teacher_id,
+        ) = prepare_user_role_data(
+            payload.role,
+            group_id,
+            teacher_id,
+        )
+
+        try:
+            auth.get_user_by_email(
+                email
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Пользователь с таким "
+                    "email уже существует."
+                ),
+            )
+
+        except auth.UserNotFoundError:
+            pass
+
+        try:
+            firebase_user = auth.create_user(
+                email=email,
+                password=password,
+                display_name=name,
+                email_verified=False,
+                disabled=False,
+            )
+
+        except Exception as error:
+            print(
+                "Ошибка Firebase Auth "
+                "при создании пользователя:",
+                repr(error),
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Не удалось создать "
+                    "Firebase-аккаунт. "
+                    "Проверьте email "
+                    "и пароль."
+                ),
+            )
+
+        created_auth_uid = (
+            firebase_user.uid
+        )
+
+        user_data = {
+            "name": name,
+            "email": email,
+            "role": role,
+            "groupId": group_id,
+            "teacherId": teacher_id,
+            "createdAt": (
+                firestore.SERVER_TIMESTAMP
+            ),
+        }
+
+        reference = (
+            db.collection("users")
+            .document(created_auth_uid)
+        )
+
+        try:
+            reference.set(
+                user_data,
+                merge=False,
+            )
+
+        except Exception:
+            try:
+                auth.delete_user(
+                    created_auth_uid
+                )
+
+            except Exception as rollback_error:
+                print(
+                    "Не удалось выполнить "
+                    "откат Firebase Auth:",
+                    repr(rollback_error),
+                )
+
+            created_auth_uid = None
+
+            raise
+
+        created_snapshot = (
+            reference.get()
+        )
+
+        created_data = (
+            created_snapshot.to_dict()
+            or user_data
+        )
+
+        return {
+            "status": "ok",
+            "message": (
+                "Пользователь успешно "
+                "создан"
+            ),
+            "user": serialize_user(
+                firebase_user.uid,
+                created_data,
+            ),
+            "createdBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка создания пользователя:",
+            repr(error),
+        )
+
+        if created_auth_uid is not None:
+            try:
+                auth.delete_user(
+                    created_auth_uid
+                )
+
+            except Exception as rollback_error:
+                print(
+                    "Не удалось выполнить "
+                    "откат Firebase Auth:",
+                    repr(rollback_error),
+                )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось создать "
+                "пользователя."
+            ),
+        )
 
 
 @app.patch("/admin/users/{uid}")
@@ -749,21 +1043,6 @@ async def update_admin_user(
 
         role = payload.role.strip().lower()
 
-        allowed_roles = {
-            "student",
-            "teacher",
-            "admin",
-        }
-
-        if role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "Недопустимая роль "
-                    "пользователя."
-                ),
-            )
-
         current_role = str(
             current_data.get("role") or ""
         ).strip().lower()
@@ -794,40 +1073,16 @@ async def update_admin_user(
             payload.teacherId
         )
 
-        if role == "student":
-            teacher_id = None
-
-            if group_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "Для учащегося "
-                        "необходимо указать "
-                        "учебную группу."
-                    ),
-                )
-
-        elif role == "teacher":
-            group_id = None
-
-            if teacher_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        "Для роли преподавателя "
-                        "необходимо выбрать "
-                        "преподавателя."
-                    ),
-                )
-
-            validate_teacher_link(
-                teacher_id,
-                uid,
-            )
-
-        elif role == "admin":
-            group_id = None
-            teacher_id = None
+        (
+            role,
+            group_id,
+            teacher_id,
+        ) = prepare_user_role_data(
+            role,
+            group_id,
+            teacher_id,
+            user_uid=uid,
+        )
 
         update_data = {
             "name": name,
@@ -1432,9 +1687,6 @@ async def publish_schedule(
                 ),
             )
 
-        # Сначала проверяем и подготавливаем
-        # занятия. На этом этапе занятия
-        # ещё не записываются в Firestore.
         prepared = analyze_import(
             db,
             parsed_data,
@@ -1459,16 +1711,12 @@ async def publish_schedule(
             - new_document_ids
         )
 
-        # После успешной подготовки занятий
-        # синхронизируем преподавателей.
         teacher_result = (
             upsert_teachers_from_schedule(
                 parsed_data
             )
         )
 
-        # Новые занятия + удаление старых
-        # выполняются одним batch.
         replacement_result = (
             commit_schedule_replacement(
                 prepared,

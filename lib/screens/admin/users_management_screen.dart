@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../services/admin_api_service.dart';
+import 'user_create_screen.dart';
 import 'user_edit_screen.dart';
 
 class UsersManagementScreen extends StatefulWidget {
@@ -65,6 +66,27 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
     }
   }
 
+  Future<void> _createUser() async {
+    final AdminUser? createdUser = await Navigator.of(context).push<AdminUser>(
+      MaterialPageRoute(builder: (context) => const UserCreateScreen()),
+    );
+
+    if (createdUser == null || !mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Пользователь '
+          '${createdUser.displayName} создан.',
+        ),
+      ),
+    );
+
+    await _loadUsers();
+  }
+
   Future<void> _openUser(AdminUser user) async {
     final AdminUser? updatedUser = await Navigator.of(context).push<AdminUser>(
       MaterialPageRoute(builder: (context) => UserEditScreen(user: user)),
@@ -125,9 +147,29 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Пользователи')),
+      appBar: AppBar(
+        title: const Text('Пользователи'),
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _createUser,
+            tooltip: 'Добавить пользователя',
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(onRefresh: _loadUsers, child: _buildContent()),
+      ),
+    );
+  }
+
+  Widget _buildAddButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _createUser,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text('Добавить пользователя'),
       ),
     );
   }
@@ -187,18 +229,18 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppTheme.screenPadding),
-        children: const [
-          SizedBox(height: 80),
+        children: [
+          const SizedBox(height: 60),
 
-          Icon(
+          const Icon(
             Icons.group_off_rounded,
             size: 56,
             color: AppTheme.secondaryText,
           ),
 
-          SizedBox(height: 18),
+          const SizedBox(height: 18),
 
-          Text(
+          const Text(
             'Пользователей пока нет',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -207,6 +249,10 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
               color: AppTheme.primaryText,
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          _buildAddButton(),
         ],
       );
     }
@@ -228,10 +274,15 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
         const SizedBox(height: 8),
 
         const Text(
-          'Нажмите на пользователя, '
+          'Создавайте новые аккаунты '
+          'или нажмите на пользователя, '
           'чтобы изменить его данные.',
           style: AppTheme.secondaryBodyText,
         ),
+
+        const SizedBox(height: 20),
+
+        _buildAddButton(),
 
         const SizedBox(height: 24),
 
