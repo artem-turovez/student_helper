@@ -56,7 +56,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.4.0",
+    version="1.5.0",
 )
 
 
@@ -193,6 +193,32 @@ def serialize_datetime(
     return str(value)
 
 
+def normalize_optional_text(
+    value: str | None,
+) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+
+    return normalized or None
+
+
+def normalize_string_list(
+    value,
+) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    return sorted(
+        {
+            str(item).strip()
+            for item in value
+            if str(item).strip()
+        }
+    )
+
+
 def serialize_user(
     uid: str,
     data: dict,
@@ -231,6 +257,111 @@ def serialize_user(
         ),
         "createdAt": serialize_datetime(
             data.get("createdAt")
+        ),
+    }
+
+
+def build_teacher_links() -> dict[str, dict]:
+    """
+    Возвращает связи:
+    teacherId -> пользователь.
+
+    Одновременно проверяет целостность данных:
+    один teacherId не должен принадлежать
+    нескольким аккаунтам.
+    """
+
+    links: dict[str, dict] = {}
+
+    documents = db.collection(
+        "users"
+    ).stream()
+
+    for document in documents:
+        data = document.to_dict() or {}
+
+        teacher_id = normalize_optional_text(
+            data.get("teacherId")
+        )
+
+        if teacher_id is None:
+            continue
+
+        existing_link = links.get(
+            teacher_id
+        )
+
+        if existing_link is not None:
+            raise RuntimeError(
+                "Обнаружена двойная привязка "
+                "преподавателя "
+                f"{teacher_id}: "
+                f"{existing_link['uid']} и "
+                f"{document.id}"
+            )
+
+        links[teacher_id] = {
+            "uid": document.id,
+            "name": normalize_optional_text(
+                data.get("name")
+            ),
+            "email": normalize_optional_text(
+                data.get("email")
+            ),
+            "role": normalize_optional_text(
+                data.get("role")
+            ),
+        }
+
+    return links
+
+
+def serialize_teacher(
+    teacher_id: str,
+    data: dict,
+    linked_user: dict | None = None,
+) -> dict:
+    return {
+        "teacherId": teacher_id,
+        "name": (
+            str(
+                data.get("name") or ""
+            ).strip()
+            or teacher_id
+        ),
+        "email": normalize_optional_text(
+            data.get("email")
+        ),
+        "phone": normalize_optional_text(
+            data.get("phone")
+        ),
+        "telegram": normalize_optional_text(
+            data.get("telegram")
+        ),
+        "photoUrl": normalize_optional_text(
+            data.get("photoUrl")
+        ),
+        "department": normalize_optional_text(
+            data.get("department")
+        ),
+        "groupIds": normalize_string_list(
+            data.get("groupIds")
+        ),
+        "linked": linked_user is not None,
+        "userUid": (
+            linked_user.get("uid")
+            if linked_user is not None
+            else None
+        ),
+        "userName": (
+            linked_user.get("name")
+            if linked_user is not None
+            else None
+        ),
+        "userEmail": (
+            linked_user.get("email")
+            if linked_user is not None
+            else None
         ),
     }
 
@@ -306,6 +437,83 @@ async def get_admin_users(
         )
 
 
+@app.get("/admin/teachers")
+async def get_admin_teachers(
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        teacher_documents = list(
+            db.collection(
+                "teachers"
+            ).stream()
+        )
+
+        teacher_links = (
+            build_teacher_links()
+        )
+
+        teachers = []
+
+        for document in teacher_documents:
+            data = document.to_dict() or {}
+
+            teachers.append(
+                serialize_teacher(
+                    document.id,
+                    data,
+                    teacher_links.get(
+                        document.id
+                    ),
+                )
+            )
+
+        teachers.sort(
+            key=lambda teacher: (
+                teacher.get("name") or ""
+            ).lower()
+        )
+
+        linked_count = sum(
+            1
+            for teacher in teachers
+            if teacher["linked"]
+        )
+
+        return {
+            "status": "ok",
+            "count": len(teachers),
+            "linkedCount": linked_count,
+            "unlinkedCount": (
+                len(teachers)
+                - linked_count
+            ),
+            "teachers": teachers,
+            "requestedBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка загрузки преподавателей:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось загрузить "
+                "преподавателей."
+            ),
+        )
+
+
 class AdminUserUpdateRequest(BaseModel):
     name: str | None = None
     role: str
@@ -313,15 +521,52 @@ class AdminUserUpdateRequest(BaseModel):
     teacherId: str | None = None
 
 
-def normalize_optional_text(
-    value: str | None,
-) -> str | None:
-    if value is None:
-        return None
+def validate_teacher_link(
+    teacher_id: str,
+    user_uid: str,
+) -> None:
+    """
+    Проверяет, что преподаватель существует
+    и ещё не связан с другим аккаунтом.
+    """
 
-    normalized = value.strip()
+    teacher_snapshot = (
+        db.collection("teachers")
+        .document(teacher_id)
+        .get()
+    )
 
-    return normalized or None
+    if not teacher_snapshot.exists:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Выбранный преподаватель "
+                "не найден."
+            ),
+        )
+
+    linked_users = list(
+        db.collection("users")
+        .where(
+            filter=FieldFilter(
+                "teacherId",
+                "==",
+                teacher_id,
+            )
+        )
+        .stream()
+    )
+
+    for linked_user in linked_users:
+        if linked_user.id != user_uid:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Этот преподаватель "
+                    "уже привязан к другому "
+                    "аккаунту."
+                ),
+            )
 
 
 @app.patch("/admin/users/{uid}")
@@ -411,18 +656,37 @@ async def update_admin_user(
             payload.teacherId
         )
 
-        # Учащемуся не нужна привязка
-        # к документу преподавателя.
         if role == "student":
             teacher_id = None
 
-        # Преподаватель не относится
-        # к одной учебной группе как учащийся.
+            if group_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Для учащегося "
+                        "необходимо указать "
+                        "учебную группу."
+                    ),
+                )
+
         elif role == "teacher":
             group_id = None
 
-        # Администратору эти связи
-        # не требуются.
+            if teacher_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Для роли преподавателя "
+                        "необходимо выбрать "
+                        "преподавателя."
+                    ),
+                )
+
+            validate_teacher_link(
+                teacher_id,
+                uid,
+            )
+
         elif role == "admin":
             group_id = None
             teacher_id = None

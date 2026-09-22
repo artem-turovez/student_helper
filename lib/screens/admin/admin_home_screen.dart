@@ -5,6 +5,7 @@ import '../../app/brand.dart';
 import '../../app/theme.dart';
 import '../auth/start_screen.dart';
 import 'schedule_management_screen.dart';
+import 'teachers_management_screen.dart';
 import 'users_management_screen.dart';
 
 class AdminHomeScreen extends StatelessWidget {
@@ -32,6 +33,12 @@ class AdminHomeScreen extends StatelessWidget {
   void _openUsers(BuildContext context) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const UsersManagementScreen()));
+  }
+
+  void _openTeachers(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TeachersManagementScreen()));
   }
 
   @override
@@ -112,7 +119,8 @@ class AdminHomeScreen extends StatelessWidget {
                 title: 'Расписание',
                 description:
                     'Загрузка и публикация '
-                    'расписания из PDF-файла.',
+                    'расписания из '
+                    'PDF-файла.',
                 onTap: () => _openSchedule(context),
               ),
 
@@ -134,18 +142,10 @@ class AdminHomeScreen extends StatelessWidget {
                 icon: Icons.school_rounded,
                 title: 'Преподаватели',
                 description:
-                    'Просмотр и управление '
-                    'данными преподавателей.',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Раздел преподавателей '
-                        'будет добавлен позже.',
-                      ),
-                    ),
-                  );
-                },
+                    'Просмотр данных '
+                    'преподавателей и '
+                    'привязки аккаунтов.',
+                onTap: () => _openTeachers(context),
               ),
             ],
           ),

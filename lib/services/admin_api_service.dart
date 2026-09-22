@@ -65,6 +65,69 @@ class AdminUser {
   }
 }
 
+class AdminTeacher {
+  const AdminTeacher({
+    required this.teacherId,
+    required this.name,
+    required this.email,
+    required this.phone,
+    required this.telegram,
+    required this.photoUrl,
+    required this.department,
+    required this.groupIds,
+    required this.linked,
+    required this.userUid,
+    required this.userName,
+    required this.userEmail,
+  });
+
+  final String teacherId;
+  final String name;
+
+  final String? email;
+  final String? phone;
+  final String? telegram;
+  final String? photoUrl;
+  final String? department;
+
+  final List<String> groupIds;
+
+  final bool linked;
+  final String? userUid;
+  final String? userName;
+  final String? userEmail;
+
+  factory AdminTeacher.fromJson(Map<String, dynamic> json) {
+    final dynamic rawGroups = json['groupIds'];
+
+    final List<String> groups;
+
+    if (rawGroups is List) {
+      groups = rawGroups
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList();
+    } else {
+      groups = <String>[];
+    }
+
+    return AdminTeacher(
+      teacherId: json['teacherId'] as String? ?? '',
+      name: json['name'] as String? ?? 'Преподаватель',
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+      telegram: json['telegram'] as String?,
+      photoUrl: json['photoUrl'] as String?,
+      department: json['department'] as String?,
+      groupIds: groups,
+      linked: json['linked'] as bool? ?? false,
+      userUid: json['userUid'] as String?,
+      userName: json['userName'] as String?,
+      userEmail: json['userEmail'] as String?,
+    );
+  }
+}
+
 class ScheduleCheckResult {
   const ScheduleCheckResult({
     required this.status,
@@ -235,6 +298,46 @@ class AdminApiService {
       throw AdminApiException(
         'Не удалось загрузить '
         'пользователей: $error',
+      );
+    }
+  }
+
+  static Future<List<AdminTeacher>> getTeachers() async {
+    final String token = await _getIdToken();
+
+    try {
+      final http.Response response = await http.get(
+        Uri.parse('$_baseUrl/admin/teachers'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final Map<String, dynamic> data = _decodeResponse(response);
+
+      if (response.statusCode != 200) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+
+      final dynamic rawTeachers = data['teachers'];
+
+      if (rawTeachers is! List) {
+        throw const AdminApiException(
+          'Сервер вернул некорректный '
+          'список преподавателей.',
+        );
+      }
+
+      return rawTeachers
+          .whereType<Map>()
+          .map((item) => AdminTeacher.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException(
+        'Не удалось загрузить '
+        'преподавателей: $error',
       );
     }
   }
