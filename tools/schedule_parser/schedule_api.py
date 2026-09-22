@@ -14,6 +14,7 @@ from fastapi import (
 )
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+from pydantic import BaseModel
 
 from import_schedule import analyze_import
 from parser import parse_pdf
@@ -55,7 +56,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.3.0",
+    version="1.4.0",
 )
 
 
@@ -192,6 +193,48 @@ def serialize_datetime(
     return str(value)
 
 
+def serialize_user(
+    uid: str,
+    data: dict,
+) -> dict:
+    return {
+        "uid": uid,
+        "name": (
+            str(
+                data.get("name") or ""
+            ).strip()
+            or None
+        ),
+        "email": (
+            str(
+                data.get("email") or ""
+            ).strip()
+            or None
+        ),
+        "role": (
+            str(
+                data.get("role") or ""
+            ).strip()
+            or None
+        ),
+        "groupId": (
+            str(
+                data.get("groupId") or ""
+            ).strip()
+            or None
+        ),
+        "teacherId": (
+            str(
+                data.get("teacherId") or ""
+            ).strip()
+            or None
+        ),
+        "createdAt": serialize_datetime(
+            data.get("createdAt")
+        ),
+    }
+
+
 @app.get("/admin/users")
 async def get_admin_users(
     admin: dict = Depends(require_admin),
@@ -207,53 +250,10 @@ async def get_admin_users(
             data = document.to_dict() or {}
 
             users.append(
-                {
-                    "uid": document.id,
-                    "name": (
-                        str(
-                            data.get("name")
-                            or ""
-                        ).strip()
-                        or None
-                    ),
-                    "email": (
-                        str(
-                            data.get("email")
-                            or ""
-                        ).strip()
-                        or None
-                    ),
-                    "role": (
-                        str(
-                            data.get("role")
-                            or ""
-                        ).strip()
-                        or None
-                    ),
-                    "groupId": (
-                        str(
-                            data.get("groupId")
-                            or ""
-                        ).strip()
-                        or None
-                    ),
-                    "teacherId": (
-                        str(
-                            data.get(
-                                "teacherId"
-                            )
-                            or ""
-                        ).strip()
-                        or None
-                    ),
-                    "createdAt": (
-                        serialize_datetime(
-                            data.get(
-                                "createdAt"
-                            )
-                        )
-                    ),
-                }
+                serialize_user(
+                    document.id,
+                    data,
+                )
             )
 
         role_order = {
@@ -302,6 +302,181 @@ async def get_admin_users(
             detail=(
                 "Не удалось загрузить "
                 "пользователей."
+            ),
+        )
+
+
+class AdminUserUpdateRequest(BaseModel):
+    name: str | None = None
+    role: str
+    groupId: str | None = None
+    teacherId: str | None = None
+
+
+def normalize_optional_text(
+    value: str | None,
+) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+
+    return normalized or None
+
+
+@app.patch("/admin/users/{uid}")
+async def update_admin_user(
+    uid: str,
+    payload: AdminUserUpdateRequest,
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        uid = uid.strip()
+
+        if not uid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "UID пользователя "
+                    "не указан."
+                ),
+            )
+
+        reference = (
+            db.collection("users")
+            .document(uid)
+        )
+
+        snapshot = reference.get()
+
+        if not snapshot.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Пользователь "
+                    "не найден."
+                ),
+            )
+
+        current_data = (
+            snapshot.to_dict() or {}
+        )
+
+        role = payload.role.strip().lower()
+
+        allowed_roles = {
+            "student",
+            "teacher",
+            "admin",
+        }
+
+        if role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Недопустимая роль "
+                    "пользователя."
+                ),
+            )
+
+        current_role = str(
+            current_data.get("role") or ""
+        ).strip().lower()
+
+        # Администратор не может случайно
+        # снять роль администратора у самого себя.
+        if (
+            uid == admin["uid"]
+            and role != current_role
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Нельзя изменить роль "
+                    "собственного "
+                    "административного "
+                    "аккаунта."
+                ),
+            )
+
+        name = normalize_optional_text(
+            payload.name
+        )
+
+        group_id = normalize_optional_text(
+            payload.groupId
+        )
+
+        teacher_id = normalize_optional_text(
+            payload.teacherId
+        )
+
+        # Учащемуся не нужна привязка
+        # к документу преподавателя.
+        if role == "student":
+            teacher_id = None
+
+        # Преподаватель не относится
+        # к одной учебной группе как учащийся.
+        elif role == "teacher":
+            group_id = None
+
+        # Администратору эти связи
+        # не требуются.
+        elif role == "admin":
+            group_id = None
+            teacher_id = None
+
+        update_data = {
+            "name": name,
+            "role": role,
+            "groupId": group_id,
+            "teacherId": teacher_id,
+        }
+
+        reference.update(
+            update_data
+        )
+
+        updated_snapshot = reference.get()
+
+        updated_data = (
+            updated_snapshot.to_dict()
+            or {}
+        )
+
+        return {
+            "status": "ok",
+            "message": (
+                "Данные пользователя "
+                "обновлены"
+            ),
+            "user": serialize_user(
+                uid,
+                updated_data,
+            ),
+            "updatedBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка обновления пользователя:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось обновить "
+                "пользователя."
             ),
         )
 
@@ -368,7 +543,9 @@ def parse_pdf_bytes(
                 temporary_file.name
             )
 
-        return parse_pdf(temporary_path)
+        return parse_pdf(
+            temporary_path
+        )
 
     finally:
         if (
@@ -377,6 +554,7 @@ def parse_pdf_bytes(
         ):
             try:
                 temporary_path.unlink()
+
             except OSError as error:
                 print(
                     "Не удалось удалить "
@@ -396,13 +574,18 @@ def build_check_response(
 
     return {
         "status": (
-            "ok" if not issues else "invalid"
+            "ok"
+            if not issues
+            else "invalid"
         ),
         "auditPassed": not issues,
         "fileName": original_name,
         "date": stats.get(
             "date",
-            parsed_data.get("date", ""),
+            parsed_data.get(
+                "date",
+                "",
+            ),
         ),
         "lessonCount": stats.get(
             "lessons",
@@ -435,7 +618,9 @@ def build_check_response(
         "issueCount": len(issues),
         "checkedBy": {
             "uid": admin["uid"],
-            "email": admin.get("email"),
+            "email": admin.get(
+                "email"
+            ),
         },
     }
 
@@ -541,12 +726,16 @@ def commit_schedule_replacement(
             )
         )
 
-        batch.delete(reference)
+        batch.delete(
+            reference
+        )
 
     batch.commit()
 
     return {
-        "written": len(prepared),
+        "written": len(
+            prepared
+        ),
         "deleted": len(
             stale_document_ids
         ),
@@ -614,7 +803,9 @@ def upsert_teachers_from_schedule(
             )
 
             if teacher_key not in teachers:
-                teachers[teacher_key] = {
+                teachers[
+                    teacher_key
+                ] = {
                     "name": canonical_name,
                     "teacherId": (
                         make_teacher_id(
@@ -707,14 +898,20 @@ def upsert_teachers_from_schedule(
 
         normalized_old_group_ids = sorted(
             {
-                str(group_id).strip()
+                str(
+                    group_id
+                ).strip()
                 for group_id in old_group_ids
-                if str(group_id).strip()
+                if str(
+                    group_id
+                ).strip()
             }
         )
 
         merged_group_ids = sorted(
-            set(normalized_old_group_ids)
+            set(
+                normalized_old_group_ids
+            )
             | teacher["groupIds"]
         )
 

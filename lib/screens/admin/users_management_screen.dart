@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../services/admin_api_service.dart';
+import 'user_edit_screen.dart';
 
 class UsersManagementScreen extends StatefulWidget {
   const UsersManagementScreen({super.key});
@@ -13,11 +14,13 @@ class UsersManagementScreen extends StatefulWidget {
 class _UsersManagementScreenState extends State<UsersManagementScreen> {
   bool _isLoading = true;
   String? _errorMessage;
+
   List<AdminUser> _users = const [];
 
   @override
   void initState() {
     super.initState();
+
     _loadUsers();
   }
 
@@ -56,19 +59,48 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
         _errorMessage =
             'Не удалось загрузить '
             'пользователей: $error';
+
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _openUser(AdminUser user) async {
+    final AdminUser? updatedUser = await Navigator.of(context).push<AdminUser>(
+      MaterialPageRoute(builder: (context) => UserEditScreen(user: user)),
+    );
+
+    if (updatedUser == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _users = _users
+          .map(
+            (currentUser) =>
+                currentUser.uid == updatedUser.uid ? updatedUser : currentUser,
+          )
+          .toList();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Данные пользователя сохранены.')),
+    );
+
+    await _loadUsers();
   }
 
   String _roleTitle(String? role) {
     switch (role) {
       case 'admin':
         return 'Администратор';
+
       case 'teacher':
         return 'Преподаватель';
+
       case 'student':
         return 'Учащийся';
+
       default:
         return 'Роль не указана';
     }
@@ -78,10 +110,13 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
     switch (role) {
       case 'admin':
         return Icons.admin_panel_settings_rounded;
+
       case 'teacher':
         return Icons.school_rounded;
+
       case 'student':
         return Icons.person_rounded;
+
       default:
         return Icons.person_outline_rounded;
     }
@@ -185,7 +220,16 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
         const SizedBox(height: 8),
 
         Text(
-          'Всего пользователей: ${_users.length}',
+          'Всего пользователей: '
+          '${_users.length}',
+          style: AppTheme.secondaryBodyText,
+        ),
+
+        const SizedBox(height: 8),
+
+        const Text(
+          'Нажмите на пользователя, '
+          'чтобы изменить его данные.',
           style: AppTheme.secondaryBodyText,
         ),
 
@@ -198,6 +242,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
               user: user,
               roleTitle: _roleTitle(user.role),
               roleIcon: _roleIcon(user.role),
+              onTap: () => _openUser(user),
             ),
           ),
         ),
@@ -211,81 +256,94 @@ class _UserCard extends StatelessWidget {
     required this.user,
     required this.roleTitle,
     required this.roleIcon,
+    required this.onTap,
   });
 
   final AdminUser user;
   final String roleTitle;
   final IconData roleIcon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final String? email = user.email;
     final String? groupId = user.groupId;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryBlue.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(roleIcon, color: AppTheme.primaryBlue),
-          ),
-
-          const SizedBox(width: 16),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user.displayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryText,
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: Icon(roleIcon, color: AppTheme.primaryBlue),
+              ),
 
-                if (email != null &&
-                    email.isNotEmpty &&
-                    email != user.displayName) ...[
-                  const SizedBox(height: 5),
+              const SizedBox(width: 16),
 
-                  Text(
-                    email,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.secondaryText,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 10),
-
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _InfoChip(icon: roleIcon, text: roleTitle),
+                    Text(
+                      user.displayName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryText,
+                      ),
+                    ),
 
-                    if (groupId != null && groupId.isNotEmpty)
-                      _InfoChip(icon: Icons.groups_rounded, text: groupId),
+                    if (email != null &&
+                        email.isNotEmpty &&
+                        email != user.displayName) ...[
+                      const SizedBox(height: 5),
+
+                      Text(
+                        email,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.secondaryText,
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 10),
+
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _InfoChip(icon: roleIcon, text: roleTitle),
+
+                        if (groupId != null && groupId.isNotEmpty)
+                          _InfoChip(icon: Icons.groups_rounded, text: groupId),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+
+              const SizedBox(width: 10),
+
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.secondaryText,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
