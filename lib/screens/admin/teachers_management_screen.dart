@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../services/admin_api_service.dart';
+import 'teacher_edit_screen.dart';
 
 class TeachersManagementScreen extends StatefulWidget {
   const TeachersManagementScreen({super.key});
@@ -82,6 +83,33 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen> {
     }
   }
 
+  Future<void> _openTeacher(AdminTeacher teacher) async {
+    final AdminTeacher? updatedTeacher = await Navigator.of(context)
+        .push<AdminTeacher>(
+          MaterialPageRoute(
+            builder: (_) => TeacherEditScreen(teacher: teacher),
+          ),
+        );
+
+    if (!mounted || updatedTeacher == null) {
+      return;
+    }
+
+    setState(() {
+      final int index = _teachers.indexWhere(
+        (item) => item.teacherId == updatedTeacher.teacherId,
+      );
+
+      if (index != -1) {
+        _teachers[index] = updatedTeacher;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Данные преподавателя сохранены.')),
+    );
+  }
+
   List<AdminTeacher> get _filteredTeachers {
     final String query = _searchController.text.trim().toLowerCase();
 
@@ -96,11 +124,17 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen> {
 
       final String department = (teacher.department ?? '').toLowerCase();
 
+      final String phone = (teacher.phone ?? '').toLowerCase();
+
+      final String telegram = (teacher.telegram ?? '').toLowerCase();
+
       return teacher.name.toLowerCase().contains(query) ||
           teacher.teacherId.toLowerCase().contains(query) ||
           groups.contains(query) ||
           email.contains(query) ||
-          department.contains(query);
+          department.contains(query) ||
+          phone.contains(query) ||
+          telegram.contains(query);
     }).toList();
   }
 
@@ -121,14 +155,11 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppTheme.screenPadding),
             children: [
-              const Text('Преподаватели', style: AppTheme.pageTitle),
-
-              const SizedBox(height: 8),
-
               const Text(
-                'Преподаватели колледжа '
+                'Преподаватели колледжа, '
+                'их контактные данные '
                 'и состояние привязки '
-                'их аккаунтов.',
+                'аккаунтов.',
                 style: AppTheme.secondaryBodyText,
               ),
 
@@ -188,7 +219,10 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen> {
                 ...filteredTeachers.map(
                   (teacher) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _TeacherCard(teacher: teacher),
+                    child: _TeacherCard(
+                      teacher: teacher,
+                      onTap: () => _openTeacher(teacher),
+                    ),
                   ),
                 ),
               ],
@@ -282,154 +316,168 @@ class _StatisticItem extends StatelessWidget {
 }
 
 class _TeacherCard extends StatelessWidget {
-  const _TeacherCard({required this.teacher});
+  const _TeacherCard({required this.teacher, required this.onTap});
 
   final AdminTeacher teacher;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.card,
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: AppTheme.primaryBlue,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+
+                  const SizedBox(width: 14),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          teacher.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primaryText,
+                          ),
+                        ),
+
+                        if (teacher.department != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            teacher.department!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.secondaryText,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.secondaryText,
+                  ),
+                ],
               ),
 
-              const SizedBox(width: 14),
+              if (teacher.groupIds.isNotEmpty) ...[
+                const SizedBox(height: 14),
 
-              Expanded(
-                child: Column(
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      teacher.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primaryText,
-                      ),
+                    const Icon(
+                      Icons.groups_2_rounded,
+                      size: 18,
+                      color: AppTheme.secondaryText,
                     ),
-
-                    if (teacher.department != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        teacher.department!,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        teacher.groupIds.join(', '),
                         style: const TextStyle(
                           fontSize: 13,
+                          height: 1.35,
                           color: AppTheme.secondaryText,
                         ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ],
+
+              if (teacher.email != null) ...[
+                const SizedBox(height: 10),
+                _InfoRow(icon: Icons.email_outlined, text: teacher.email!),
+              ],
+
+              if (teacher.phone != null) ...[
+                const SizedBox(height: 10),
+                _InfoRow(icon: Icons.phone_outlined, text: teacher.phone!),
+              ],
+
+              if (teacher.telegram != null) ...[
+                const SizedBox(height: 10),
+                _InfoRow(icon: Icons.send_rounded, text: teacher.telegram!),
+              ],
+
+              const SizedBox(height: 16),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: teacher.linked
+                      ? AppTheme.primaryBlue.withValues(alpha: 0.10)
+                      : AppTheme.secondaryText.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      teacher.linked
+                          ? Icons.link_rounded
+                          : Icons.link_off_rounded,
+                      size: 19,
+                      color: teacher.linked
+                          ? AppTheme.primaryBlue
+                          : AppTheme.secondaryText,
+                    ),
+
+                    const SizedBox(width: 9),
+
+                    Expanded(
+                      child: Text(
+                        teacher.linked
+                            ? _linkedText(teacher)
+                            : 'Аккаунт '
+                                  'не привязан',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: teacher.linked
+                              ? AppTheme.primaryBlue
+                              : AppTheme.secondaryText,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-
-          if (teacher.groupIds.isNotEmpty) ...[
-            const SizedBox(height: 14),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.groups_2_rounded,
-                  size: 18,
-                  color: AppTheme.secondaryText,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    teacher.groupIds.join(', '),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.35,
-                      color: AppTheme.secondaryText,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-
-          if (teacher.email != null) ...[
-            const SizedBox(height: 10),
-
-            _InfoRow(icon: Icons.email_outlined, text: teacher.email!),
-          ],
-
-          if (teacher.phone != null) ...[
-            const SizedBox(height: 10),
-
-            _InfoRow(icon: Icons.phone_outlined, text: teacher.phone!),
-          ],
-
-          if (teacher.telegram != null) ...[
-            const SizedBox(height: 10),
-
-            _InfoRow(icon: Icons.send_rounded, text: teacher.telegram!),
-          ],
-
-          const SizedBox(height: 16),
-
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: teacher.linked
-                  ? AppTheme.primaryBlue.withValues(alpha: 0.10)
-                  : AppTheme.secondaryText.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  teacher.linked ? Icons.link_rounded : Icons.link_off_rounded,
-                  size: 19,
-                  color: teacher.linked
-                      ? AppTheme.primaryBlue
-                      : AppTheme.secondaryText,
-                ),
-
-                const SizedBox(width: 9),
-
-                Expanded(
-                  child: Text(
-                    teacher.linked
-                        ? _linkedText(teacher)
-                        : 'Аккаунт '
-                              'не привязан',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: teacher.linked
-                          ? AppTheme.primaryBlue
-                          : AppTheme.secondaryText,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -536,11 +584,7 @@ class _EmptyCard extends StatelessWidget {
             color: AppTheme.secondaryText,
           ),
           SizedBox(height: 12),
-          Text(
-            'Преподаватели '
-            'не найдены.',
-            style: AppTheme.secondaryBodyText,
-          ),
+          Text('Преподаватели не найдены.', style: AppTheme.secondaryBodyText),
         ],
       ),
     );

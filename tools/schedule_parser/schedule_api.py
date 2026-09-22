@@ -56,7 +56,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.5.0",
+    version="1.6.0",
 )
 
 
@@ -514,6 +514,146 @@ async def get_admin_teachers(
         )
 
 
+class AdminTeacherUpdateRequest(BaseModel):
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    telegram: str | None = None
+    department: str | None = None
+
+
+@app.patch("/admin/teachers/{teacher_id}")
+async def update_admin_teacher(
+    teacher_id: str,
+    payload: AdminTeacherUpdateRequest,
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        teacher_id = teacher_id.strip()
+
+        if not teacher_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "ID преподавателя "
+                    "не указан."
+                ),
+            )
+
+        reference = (
+            db.collection("teachers")
+            .document(teacher_id)
+        )
+
+        snapshot = reference.get()
+
+        if not snapshot.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Преподаватель "
+                    "не найден."
+                ),
+            )
+
+        name = normalize_optional_text(
+            payload.name
+        )
+
+        if name is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Необходимо указать "
+                    "ФИО преподавателя."
+                ),
+            )
+
+        email = normalize_optional_text(
+            payload.email
+        )
+
+        phone = normalize_optional_text(
+            payload.phone
+        )
+
+        telegram = normalize_optional_text(
+            payload.telegram
+        )
+
+        department = normalize_optional_text(
+            payload.department
+        )
+
+        # Намеренно обновляем только
+        # редактируемые администратором поля.
+        #
+        # teacherId остаётся ID документа.
+        # groupIds формируется расписанием.
+        # Связь с аккаунтом хранится
+        # в users/<uid>.teacherId.
+        update_data = {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "telegram": telegram,
+            "department": department,
+        }
+
+        reference.update(
+            update_data
+        )
+
+        updated_snapshot = reference.get()
+
+        updated_data = (
+            updated_snapshot.to_dict()
+            or {}
+        )
+
+        teacher_links = (
+            build_teacher_links()
+        )
+
+        return {
+            "status": "ok",
+            "message": (
+                "Данные преподавателя "
+                "обновлены"
+            ),
+            "teacher": serialize_teacher(
+                teacher_id,
+                updated_data,
+                teacher_links.get(
+                    teacher_id
+                ),
+            ),
+            "updatedBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка обновления преподавателя:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось обновить "
+                "преподавателя."
+            ),
+        )
+
+
 class AdminUserUpdateRequest(BaseModel):
     name: str | None = None
     role: str
@@ -628,8 +768,6 @@ async def update_admin_user(
             current_data.get("role") or ""
         ).strip().lower()
 
-        # Администратор не может случайно
-        # снять роль администратора у самого себя.
         if (
             uid == admin["uid"]
             and role != current_role
