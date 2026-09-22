@@ -13,27 +13,22 @@ from fastapi import (
     status,
 )
 from firebase_admin import auth, credentials, firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
-from import_schedule import (
-    analyze_import,
-    commit_import,
-)
+from import_schedule import analyze_import
 from parser import parse_pdf
 from schedule_audit import audit_json
-from teacher_importer import (
-    analyze_existing_teachers,
-    build_firestore_document,
-    collect_teachers,
-    load_existing_teachers,
-)
+from teacher_importer import load_existing_teachers
 
 
 BASE_DIR = Path(__file__).resolve().parent
-SERVICE_ACCOUNT_PATH = (
-    BASE_DIR / "service-account.json"
-)
+SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
 
 MAX_PDF_SIZE = 15 * 1024 * 1024
+
+# Firestore допускает до 500 операций записи в одном batch.
+# Оставляем небольшой запас.
+MAX_BATCH_OPERATIONS = 450
 
 
 def initialize_firebase() -> None:
@@ -60,16 +55,14 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.1.0",
+    version="1.2.0",
 )
 
 
 @app.get("/")
 def root() -> dict[str, str]:
     return {
-        "service": (
-            "Student Helper Schedule API"
-        ),
+        "service": "Student Helper Schedule API",
         "status": "running",
     }
 
@@ -88,24 +81,17 @@ async def require_admin(
 ) -> dict:
     if authorization is None:
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                "Отсутствует "
-                "Authorization header"
+                "Отсутствует Authorization header"
             ),
         )
 
     prefix = "Bearer "
 
-    if not authorization.startswith(
-        prefix
-    ):
+    if not authorization.startswith(prefix):
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "Неверный формат "
                 "Authorization header"
@@ -118,26 +104,19 @@ async def require_admin(
 
     if not id_token:
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
-                "Firebase ID token "
-                "отсутствует"
+                "Firebase ID token отсутствует"
             ),
         )
 
     try:
-        decoded_token = (
-            auth.verify_id_token(
-                id_token
-            )
+        decoded_token = auth.verify_id_token(
+            id_token
         )
     except Exception:
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "Недействительный "
                 "Firebase ID token"
@@ -148,9 +127,7 @@ async def require_admin(
 
     if not uid:
         raise HTTPException(
-            status_code=(
-                status.HTTP_401_UNAUTHORIZED
-            ),
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "UID отсутствует "
                 "в Firebase token"
@@ -165,28 +142,18 @@ async def require_admin(
 
     if not user_document.exists:
         raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=(
                 "Профиль пользователя "
                 "не найден"
             ),
         )
 
-    user_data = (
-        user_document.to_dict()
-        or {}
-    )
+    user_data = user_document.to_dict() or {}
 
-    if (
-        user_data.get("role")
-        != "admin"
-    ):
+    if user_data.get("role") != "admin":
         raise HTTPException(
-            status_code=(
-                status.HTTP_403_FORBIDDEN
-            ),
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=(
                 "Доступ разрешён только "
                 "администратору"
@@ -195,18 +162,14 @@ async def require_admin(
 
     return {
         "uid": uid,
-        "email": decoded_token.get(
-            "email"
-        ),
+        "email": decoded_token.get("email"),
         "role": "admin",
     }
 
 
 @app.get("/admin/check")
 async def admin_check(
-    admin: dict = Depends(
-        require_admin
-    ),
+    admin: dict = Depends(require_admin),
 ) -> dict:
     return {
         "status": "ok",
@@ -221,20 +184,16 @@ async def read_pdf_upload(
     file: UploadFile,
 ) -> tuple[str, bytes]:
     original_name = (
-        file.filename
-        or "schedule.pdf"
+        file.filename or "schedule.pdf"
     )
 
     if not original_name.lower().endswith(
         ".pdf"
     ):
         raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Разрешены только "
-                "PDF-файлы"
+                "Разрешены только PDF-файлы"
             ),
         )
 
@@ -242,17 +201,13 @@ async def read_pdf_upload(
 
     if not contents:
         raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="PDF-файл пуст",
         )
 
     if len(contents) > MAX_PDF_SIZE:
         raise HTTPException(
-            status_code=(
-                status.HTTP_413_CONTENT_TOO_LARGE
-            ),
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
                 "PDF-файл слишком большой. "
                 "Максимальный размер — 15 МБ."
@@ -261,19 +216,14 @@ async def read_pdf_upload(
 
     if not contents.startswith(b"%PDF"):
         raise HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "Содержимое файла "
                 "не похоже на PDF"
             ),
         )
 
-    return (
-        original_name,
-        contents,
-    )
+    return original_name, contents
 
 
 def parse_pdf_bytes(
@@ -286,17 +236,13 @@ def parse_pdf_bytes(
             suffix=".pdf",
             delete=False,
         ) as temporary_file:
-            temporary_file.write(
-                contents
-            )
+            temporary_file.write(contents)
 
             temporary_path = Path(
                 temporary_file.name
             )
 
-        return parse_pdf(
-            temporary_path
-        )
+        return parse_pdf(temporary_path)
 
     finally:
         if (
@@ -324,18 +270,13 @@ def build_check_response(
 
     return {
         "status": (
-            "ok"
-            if not issues
-            else "invalid"
+            "ok" if not issues else "invalid"
         ),
         "auditPassed": not issues,
         "fileName": original_name,
         "date": stats.get(
             "date",
-            parsed_data.get(
-                "date",
-                "",
-            ),
+            parsed_data.get("date", ""),
         ),
         "lessonCount": stats.get(
             "lessons",
@@ -365,14 +306,10 @@ def build_check_response(
             0,
         ),
         "issues": issues,
-        "issueCount": len(
-            issues
-        ),
+        "issueCount": len(issues),
         "checkedBy": {
             "uid": admin["uid"],
-            "email": admin.get(
-                "email"
-            ),
+            "email": admin.get("email"),
         },
     }
 
@@ -400,18 +337,18 @@ def parse_schedule_date(
 def get_existing_lesson_ids(
     schedule_date: str,
 ) -> set[str]:
-    firestore_date = (
-        parse_schedule_date(
-            schedule_date
-        )
+    firestore_date = parse_schedule_date(
+        schedule_date
     )
 
     documents = (
         db.collection("lessons")
         .where(
-            "date",
-            "==",
-            firestore_date,
+            filter=FieldFilter(
+                "date",
+                "==",
+                firestore_date,
+            )
         )
         .stream()
     )
@@ -422,49 +359,73 @@ def get_existing_lesson_ids(
     }
 
 
-def delete_stale_lessons(
-    document_ids: set[str],
-) -> int:
-    if not document_ids:
-        return 0
+def commit_schedule_replacement(
+    prepared: list,
+    stale_document_ids: set[str],
+) -> dict[str, int]:
+    """
+    Записывает новое расписание и удаляет
+    устаревшие занятия одним Firestore batch.
 
-    collection = db.collection(
+    Благодаря этому изменения занятий одной
+    даты применяются целиком.
+    """
+
+    total_operations = (
+        len(prepared)
+        + len(stale_document_ids)
+    )
+
+    if total_operations > MAX_BATCH_OPERATIONS:
+        raise ValueError(
+            "Слишком много операций для "
+            "безопасной атомарной публикации: "
+            f"{total_operations}. "
+            f"Максимум: {MAX_BATCH_OPERATIONS}."
+        )
+
+    batch = db.batch()
+
+    lessons_collection = db.collection(
         "lessons"
     )
 
-    ids = sorted(
-        document_ids
-    )
-
-    batch_size = 400
-    deleted = 0
-
-    for start in range(
-        0,
-        len(ids),
-        batch_size,
-    ):
-        chunk = ids[
-            start:
-            start + batch_size
-        ]
-
-        batch = db.batch()
-
-        for document_id in chunk:
-            batch.delete(
-                collection.document(
-                    document_id
-                )
+    for (
+        document_id,
+        document_data,
+    ) in prepared:
+        reference = (
+            lessons_collection.document(
+                document_id
             )
-
-        batch.commit()
-
-        deleted += len(
-            chunk
         )
 
-    return deleted
+        batch.set(
+            reference,
+            document_data,
+            merge=False,
+        )
+
+    for document_id in sorted(
+        stale_document_ids
+    ):
+        reference = (
+            lessons_collection.document(
+                document_id
+            )
+        )
+
+        batch.delete(reference)
+
+    batch.commit()
+
+    return {
+        "written": len(prepared),
+        "deleted": len(
+            stale_document_ids
+        ),
+        "operations": total_operations,
+    }
 
 
 def upsert_teachers_from_schedule(
@@ -475,10 +436,7 @@ def upsert_teachers_from_schedule(
         [],
     )
 
-    teachers: dict[
-        str,
-        dict
-    ] = {}
+    teachers: dict[str, dict] = {}
 
     from teacher_names import (
         normalize_teacher_key,
@@ -503,8 +461,8 @@ def upsert_teachers_from_schedule(
             or ""
         ).strip()
 
-        lesson_teachers = (
-            lesson.get("teachers")
+        lesson_teachers = lesson.get(
+            "teachers"
         )
 
         if not isinstance(
@@ -529,16 +487,9 @@ def upsert_teachers_from_schedule(
                 )
             )
 
-            if (
-                teacher_key
-                not in teachers
-            ):
-                teachers[
-                    teacher_key
-                ] = {
-                    "name": (
-                        canonical_name
-                    ),
+            if teacher_key not in teachers:
+                teachers[teacher_key] = {
+                    "name": canonical_name,
                     "teacherId": (
                         make_teacher_id(
                             canonical_name
@@ -550,16 +501,12 @@ def upsert_teachers_from_schedule(
             if group_id:
                 teachers[
                     teacher_key
-                ][
-                    "groupIds"
-                ].add(
+                ]["groupIds"].add(
                     group_id
                 )
 
-    existing = (
-        load_existing_teachers(
-            db
-        )
+    existing = load_existing_teachers(
+        db
     )
 
     created = 0
@@ -570,10 +517,8 @@ def upsert_teachers_from_schedule(
             "teacherId"
         ]
 
-        existing_document = (
-            existing.get(
-                teacher_id
-            )
+        existing_document = existing.get(
+            teacher_id
         )
 
         reference = (
@@ -583,9 +528,7 @@ def upsert_teachers_from_schedule(
 
         if existing_document is None:
             document = {
-                "name": (
-                    teacher["name"]
-                ),
+                "name": teacher["name"],
                 "email": None,
                 "phone": None,
                 "telegram": None,
@@ -636,29 +579,22 @@ def upsert_teachers_from_schedule(
         ):
             old_group_ids = []
 
-        merged_group_ids = sorted(
+        normalized_old_group_ids = sorted(
             {
                 str(group_id).strip()
-                for group_id
-                in old_group_ids
-                if str(
-                    group_id
-                ).strip()
+                for group_id in old_group_ids
+                if str(group_id).strip()
             }
-            |
-            teacher["groupIds"]
+        )
+
+        merged_group_ids = sorted(
+            set(normalized_old_group_ids)
+            | teacher["groupIds"]
         )
 
         if (
             merged_group_ids
-            != sorted(
-                str(group_id).strip()
-                for group_id
-                in old_group_ids
-                if str(
-                    group_id
-                ).strip()
-            )
+            != normalized_old_group_ids
         ):
             reference.update(
                 {
@@ -711,9 +647,7 @@ async def check_schedule(
         )
 
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_CONTENT
-            ),
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Не удалось обработать "
                 "PDF-расписание: "
@@ -750,9 +684,7 @@ async def publish_schedule(
 
         if issues:
             raise HTTPException(
-                status_code=(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT
-                ),
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     "Расписание не прошло "
                     "проверку и не может "
@@ -768,21 +700,16 @@ async def publish_schedule(
 
         if not schedule_date:
             raise HTTPException(
-                status_code=(
-                    status.HTTP_422_UNPROCESSABLE_CONTENT
-                ),
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     "Не удалось определить "
                     "дату расписания."
                 ),
             )
 
-        teacher_result = (
-            upsert_teachers_from_schedule(
-                parsed_data
-            )
-        )
-
+        # Сначала проверяем и подготавливаем
+        # занятия. На этом этапе занятия
+        # ещё не записываются в Firestore.
         prepared = analyze_import(
             db,
             parsed_data,
@@ -807,14 +734,20 @@ async def publish_schedule(
             - new_document_ids
         )
 
-        commit_import(
-            db,
-            prepared,
+        # После успешной подготовки занятий
+        # синхронизируем преподавателей.
+        teacher_result = (
+            upsert_teachers_from_schedule(
+                parsed_data
+            )
         )
 
-        deleted_count = (
-            delete_stale_lessons(
-                stale_document_ids
+        # Новые занятия + удаление старых
+        # выполняются одним batch.
+        replacement_result = (
+            commit_schedule_replacement(
+                prepared,
+                stale_document_ids,
             )
         )
 
@@ -826,14 +759,18 @@ async def publish_schedule(
             ),
             "fileName": original_name,
             "date": schedule_date,
-            "lessonCount": len(
-                prepared
+            "lessonCount": (
+                replacement_result[
+                    "written"
+                ]
             ),
             "previousLessonCount": len(
                 existing_document_ids
             ),
             "deletedLessonCount": (
-                deleted_count
+                replacement_result[
+                    "deleted"
+                ]
             ),
             "teachersCreated": (
                 teacher_result[
@@ -863,9 +800,7 @@ async def publish_schedule(
         )
 
         raise HTTPException(
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_CONTENT
-            ),
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Не удалось опубликовать "
                 "расписание: "
