@@ -11,15 +11,25 @@ SERVICE_ACCOUNT_PATH = (
 )
 
 
-def get_firestore_client():
-    if not SERVICE_ACCOUNT_PATH.exists():
-        raise FileNotFoundError(
-            "Не найден service-account.json.\n"
-            f"Ожидаемый путь: "
-            f"{SERVICE_ACCOUNT_PATH}"
-        )
+def initialize_firebase() -> None:
+    """
+    Инициализирует Firebase Admin SDK.
 
-    if not firebase_admin._apps:
+    Локальная разработка:
+    используется service-account.json,
+    если файл существует.
+
+    Production:
+    если локального файла нет,
+    Firebase Admin SDK использует
+    Application Default Credentials
+    окружения сервера.
+    """
+
+    if firebase_admin._apps:
+        return
+
+    if SERVICE_ACCOUNT_PATH.exists():
         credential = credentials.Certificate(
             str(SERVICE_ACCOUNT_PATH)
         )
@@ -27,6 +37,14 @@ def get_firestore_client():
         firebase_admin.initialize_app(
             credential
         )
+
+        return
+
+    firebase_admin.initialize_app()
+
+
+def get_firestore_client():
+    initialize_firebase()
 
     return firestore.client()
 
@@ -36,10 +54,16 @@ def test_connection() -> None:
     print("ПРОВЕРКА FIREBASE")
     print("=" * 60)
 
-    print(
-        "Service Account:",
-        SERVICE_ACCOUNT_PATH,
-    )
+    if SERVICE_ACCOUNT_PATH.exists():
+        print(
+            "Авторизация: "
+            "локальный service-account.json"
+        )
+    else:
+        print(
+            "Авторизация: "
+            "Application Default Credentials"
+        )
 
     print(
         "Подключение к Firestore..."

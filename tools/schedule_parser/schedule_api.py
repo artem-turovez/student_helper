@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 
-import firebase_admin
 from fastapi import (
     Depends,
     FastAPI,
@@ -12,10 +11,11 @@ from fastapi import (
     UploadFile,
     status,
 )
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import auth
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel
 
+from firebase_connection import get_firestore_client
 from import_schedule import analyze_import
 from parser import parse_pdf
 from schedule_audit import audit_json
@@ -23,7 +23,6 @@ from teacher_importer import load_existing_teachers
 
 
 BASE_DIR = Path(__file__).resolve().parent
-SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
 
 MAX_PDF_SIZE = 15 * 1024 * 1024
 
@@ -32,27 +31,7 @@ MAX_PDF_SIZE = 15 * 1024 * 1024
 MAX_BATCH_OPERATIONS = 450
 
 
-def initialize_firebase() -> None:
-    if firebase_admin._apps:
-        return
-
-    if not SERVICE_ACCOUNT_PATH.exists():
-        raise RuntimeError(
-            "Не найден service-account.json"
-        )
-
-    credential = credentials.Certificate(
-        str(SERVICE_ACCOUNT_PATH)
-    )
-
-    firebase_admin.initialize_app(
-        credential
-    )
-
-
-initialize_firebase()
-
-db = firestore.client()
+db = get_firestore_client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
