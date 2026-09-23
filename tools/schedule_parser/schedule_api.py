@@ -1742,82 +1742,17 @@ def get_existing_lesson_ids(
     }
 
 
-def commit_schedule_replacement(
-    prepared: list,
-    stale_document_ids: set[str],
-) -> dict[str, int]:
-    """
-    Записывает новое расписание и удаляет
-    устаревшие занятия одним Firestore batch.
-
-    Благодаря этому изменения занятий одной
-    даты применяются целиком.
-    """
-
-    total_operations = (
-        len(prepared)
-        + len(stale_document_ids)
-    )
-
-    if total_operations > MAX_BATCH_OPERATIONS:
-        raise ValueError(
-            "Слишком много операций для "
-            "безопасной атомарной публикации: "
-            f"{total_operations}. "
-            f"Максимум: {MAX_BATCH_OPERATIONS}."
-        )
-
-    batch = db.batch()
-
-    lessons_collection = db.collection(
-        "lessons"
-    )
-
-    for (
-        document_id,
-        document_data,
-    ) in prepared:
-        reference = (
-            lessons_collection.document(
-                document_id
-            )
-        )
-
-        batch.set(
-            reference,
-            document_data,
-            merge=False,
-        )
-
-    for document_id in sorted(
-        stale_document_ids
-    ):
-        reference = (
-            lessons_collection.document(
-                document_id
-            )
-        )
-
-        batch.delete(
-            reference
-        )
-
-    batch.commit()
-
-    return {
-        "written": len(
-            prepared
-        ),
-        "deleted": len(
-            stale_document_ids
-        ),
-        "operations": total_operations,
-    }
-
-
-def upsert_teachers_from_schedule(
+def prepare_teachers_from_schedule(
     parsed_data: dict,
-) -> dict[str, int]:
+) -> tuple[list[tuple], dict[str, int]]:
+    """
+    Подготавливает изменения преподавателей,
+    но ничего не записывает в Firestore.
+
+    Это позволяет включить преподавателей
+    и занятия в одну атомарную публикацию.
+    """
+
     lessons = parsed_data.get(
         "lessons",
         [],
@@ -1898,6 +1833,8 @@ def upsert_teachers_from_schedule(
         db
     )
 
+    operations: list[tuple] = []
+
     created = 0
     updated = 0
 
@@ -1928,9 +1865,12 @@ def upsert_teachers_from_schedule(
                 ),
             }
 
-            reference.set(
-                document,
-                merge=False,
+            operations.append(
+                (
+                    "set",
+                    reference,
+                    document,
+                )
             )
 
             created += 1
@@ -1991,20 +1931,194 @@ def upsert_teachers_from_schedule(
             merged_group_ids
             != normalized_old_group_ids
         ):
-            reference.update(
-                {
-                    "groupIds": (
-                        merged_group_ids
-                    ),
-                }
+            operations.append(
+                (
+                    "update",
+                    reference,
+                    {
+                        "groupIds": (
+                            merged_group_ids
+                        ),
+                    },
+                )
             )
 
             updated += 1
 
+    return (
+        operations,
+        {
+            "created": created,
+            "updated": updated,
+        },
+    )
+
+
+def commit_schedule_replacement(
+    prepared: list,
+    stale_document_ids: set[str],
+    teacher_operations: list[tuple],
+) -> dict[str, int]:
+    """
+    Атомарно публикует расписание вместе
+    с изменениями преподавателей.
+
+    Если любая операция не может быть
+    выполнена, Firestore не применит batch
+    частично.
+    """
+
+    total_operations = (
+        len(prepared)
+        + len(stale_document_ids)
+        + len(teacher_operations)
+    )
+
+    if total_operations > MAX_BATCH_OPERATIONS:
+        raise ValueError(
+            "Слишком много операций для "
+            "безопасной атомарной публикации: "
+            f"{total_operations}. "
+            f"Максимум: {MAX_BATCH_OPERATIONS}."
+        )
+
+    batch = db.batch()
+
+    lessons_collection = db.collection(
+        "lessons"
+    )
+
+    for (
+        operation,
+        reference,
+        document,
+    ) in teacher_operations:
+        if operation == "set":
+            batch.set(
+                reference,
+                document,
+                merge=False,
+            )
+
+        elif operation == "update":
+            batch.update(
+                reference,
+                document,
+            )
+
+        else:
+            raise ValueError(
+                "Неизвестная операция "
+                "преподавателя: "
+                f"{operation}"
+            )
+
+    for (
+        document_id,
+        document_data,
+    ) in prepared:
+        reference = (
+            lessons_collection.document(
+                document_id
+            )
+        )
+
+        batch.set(
+            reference,
+            document_data,
+            merge=False,
+        )
+
+    for document_id in sorted(
+        stale_document_ids
+    ):
+        reference = (
+            lessons_collection.document(
+                document_id
+            )
+        )
+
+        batch.delete(
+            reference
+        )
+
+    batch.commit()
+
     return {
-        "created": created,
-        "updated": updated,
+        "written": len(
+            prepared
+        ),
+        "deleted": len(
+            stale_document_ids
+        ),
+        "teacherOperations": len(
+            teacher_operations
+        ),
+        "operations": total_operations,
     }
+
+
+def upsert_teachers_from_schedule(
+    parsed_data: dict,
+) -> dict[str, int]:
+    """
+    Сохраняет совместимость для мест,
+    где эта функция может использоваться
+    отдельно от публикации расписания.
+    """
+
+    (
+        teacher_operations,
+        result,
+    ) = prepare_teachers_from_schedule(
+        parsed_data
+    )
+
+    if not teacher_operations:
+        return result
+
+    if (
+        len(teacher_operations)
+        > MAX_BATCH_OPERATIONS
+    ):
+        raise ValueError(
+            "Слишком много операций "
+            "обновления преподавателей: "
+            f"{len(teacher_operations)}. "
+            f"Максимум: "
+            f"{MAX_BATCH_OPERATIONS}."
+        )
+
+    batch = db.batch()
+
+    for (
+        operation,
+        reference,
+        document,
+    ) in teacher_operations:
+        if operation == "set":
+            batch.set(
+                reference,
+                document,
+                merge=False,
+            )
+
+        elif operation == "update":
+            batch.update(
+                reference,
+                document,
+            )
+
+        else:
+            raise ValueError(
+                "Неизвестная операция "
+                "преподавателя: "
+                f"{operation}"
+            )
+
+    batch.commit()
+
+    return result
 
 
 @app.post("/schedule/check")
@@ -2126,16 +2240,18 @@ async def publish_schedule(
             - new_document_ids
         )
 
-        teacher_result = (
-            upsert_teachers_from_schedule(
-                parsed_data
-            )
+        (
+            teacher_operations,
+            teacher_result,
+        ) = prepare_teachers_from_schedule(
+            parsed_data
         )
 
         replacement_result = (
             commit_schedule_replacement(
                 prepared,
                 stale_document_ids,
+                teacher_operations,
             )
         )
 
