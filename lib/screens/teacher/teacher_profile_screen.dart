@@ -242,21 +242,10 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                 32,
               ),
               children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Профиль', style: AppTheme.pageTitle),
-                    ),
-                    if (teacher != null)
-                      IconButton(
-                        onPressed: () {
-                          _openEditProfile(teacher);
-                        },
-                        tooltip: 'Редактировать профиль',
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                  ],
-                ),
+                const Text(
+  'Профиль',
+  style: AppTheme.pageTitle,
+),
 
                 const SizedBox(height: 28),
 
