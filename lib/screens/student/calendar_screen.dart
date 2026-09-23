@@ -13,17 +13,13 @@ class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
   @override
-  State<CalendarScreen> createState() =>
-      _CalendarScreenState();
+  State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
-class _CalendarScreenState
-    extends State<CalendarScreen> {
-  final AcademicEventService _academicEventService =
-      AcademicEventService();
+class _CalendarScreenState extends State<CalendarScreen> {
+  final AcademicEventService _academicEventService = AcademicEventService();
 
-  final PersonalEventService _personalEventService =
-      PersonalEventService();
+  final PersonalEventService _personalEventService = PersonalEventService();
 
   late DateTime _visibleMonth;
   late DateTime _selectedDate;
@@ -82,59 +78,53 @@ class _CalendarScreenState
 
     final DateTime now = DateTime.now();
 
-    _visibleMonth = DateTime(
-      now.year,
-      now.month,
-      1,
-    );
+    _visibleMonth = DateTime(now.year, now.month, 1);
 
-    _selectedDate = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    );
+    _selectedDate = DateTime(now.year, now.month, now.day);
 
     _loadStudentGroup();
   }
 
   Future<void> _loadStudentGroup() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
+
     try {
-      final User? user =
-          FirebaseAuth.instance.currentUser;
+      final User? user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
-        throw Exception(
-          'Пользователь не авторизован',
-        );
+        throw Exception('Пользователь не авторизован');
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
+      final DocumentSnapshot<Map<String, dynamic>> document =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .get();
 
-      final Map<String, dynamic>? data =
-          document.data();
-
-      final String? groupId =
-          data?['groupId']?.toString();
-
-      if (groupId == null ||
-          groupId.trim().isEmpty) {
-        throw Exception(
-          'Учебная группа не назначена',
-        );
+      if (!document.exists) {
+        throw Exception('Профиль пользователя не найден');
       }
 
-      _groupId = groupId;
+      final Map<String, dynamic>? data = document.data();
+
+      if (data == null) {
+        throw Exception('Не удалось получить данные пользователя');
+      }
+
+      final String? loadedGroupId = data['groupId']?.toString().trim();
+
+      _groupId = loadedGroupId == null || loadedGroupId.isEmpty
+          ? null
+          : loadedGroupId;
 
       await _loadEvents();
     } catch (error) {
-      debugPrint(
-        'Ошибка получения группы для календаря: $error',
-      );
+      debugPrint('Ошибка получения группы для календаря: $error');
 
       if (!mounted) {
         return;
@@ -148,12 +138,20 @@ class _CalendarScreenState
   }
 
   Future<void> _loadEvents() async {
-    final String? groupId = _groupId;
+    final User? user = FirebaseAuth.instance.currentUser;
 
-    final User? user =
-        FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
 
-    if (groupId == null || user == null) {
+      setState(() {
+        _academicEvents = [];
+        _personalEvents = [];
+        _isLoading = false;
+        _hasError = true;
+      });
+
       return;
     }
 
@@ -165,23 +163,19 @@ class _CalendarScreenState
     }
 
     try {
-      final List<dynamic> results =
-          await Future.wait([
-        _academicEventService.getEventsForMonth(
-          groupId: groupId,
-          month: _visibleMonth,
-        ),
-        _personalEventService.getEventsForMonth(
-          userId: user.uid,
-          month: _visibleMonth,
-        ),
-      ]);
+      final String? currentGroupId = _groupId;
 
-      final List<AcademicEvent> academicEvents =
-          results[0] as List<AcademicEvent>;
+      List<AcademicEvent> academicEvents = [];
 
-      final List<PersonalEvent> personalEvents =
-          results[1] as List<PersonalEvent>;
+      if (currentGroupId != null && currentGroupId.isNotEmpty) {
+        academicEvents = await _academicEventService.getEventsForMonth(
+          groupId: currentGroupId,
+          month: _visibleMonth,
+        );
+      }
+
+      final List<PersonalEvent> personalEvents = await _personalEventService
+          .getEventsForMonth(userId: user.uid, month: _visibleMonth);
 
       if (!mounted) {
         return;
@@ -194,9 +188,7 @@ class _CalendarScreenState
         _hasError = false;
       });
     } catch (error) {
-      debugPrint(
-        'Ошибка загрузки событий календаря: $error',
-      );
+      debugPrint('Ошибка загрузки событий календаря: $error');
 
       if (!mounted) {
         return;
@@ -212,13 +204,10 @@ class _CalendarScreenState
   }
 
   Future<void> _openCreatePersonalEvent() async {
-    final bool? changed =
-        await Navigator.of(context).push<bool>(
+    final bool? changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) =>
-            CreatePersonalEventScreen(
-          initialDate: _selectedDate,
-        ),
+            CreatePersonalEventScreen(initialDate: _selectedDate),
       ),
     );
 
@@ -227,17 +216,11 @@ class _CalendarScreenState
     }
   }
 
-  Future<void> _editPersonalEvent(
-    PersonalEvent event,
-  ) async {
-    final bool? changed =
-        await Navigator.of(context).push<bool>(
+  Future<void> _editPersonalEvent(PersonalEvent event) async {
+    final bool? changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) =>
-            CreatePersonalEventScreen(
-          initialDate: event.date,
-          event: event,
-        ),
+            CreatePersonalEventScreen(initialDate: event.date, event: event),
       ),
     );
 
@@ -246,9 +229,7 @@ class _CalendarScreenState
     }
   }
 
-  Future<void> _togglePersonalEvent(
-    PersonalEvent event,
-  ) async {
+  Future<void> _togglePersonalEvent(PersonalEvent event) async {
     final String? eventId = event.id;
 
     if (eventId == null) {
@@ -263,41 +244,30 @@ class _CalendarScreenState
 
       await _loadEvents();
     } catch (error) {
-      debugPrint(
-        'Ошибка изменения статуса события: $error',
-      );
+      debugPrint('Ошибка изменения статуса события: $error');
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Не удалось изменить статус события',
-          ),
-        ),
+        const SnackBar(content: Text('Не удалось изменить статус события')),
       );
     }
   }
 
-  Future<void> _deletePersonalEvent(
-    PersonalEvent event,
-  ) async {
+  Future<void> _deletePersonalEvent(PersonalEvent event) async {
     final String? eventId = event.id;
 
     if (eventId == null) {
       return;
     }
 
-    final bool? shouldDelete =
-        await showDialog<bool>(
+    final bool? shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Удалить событие?',
-          ),
+          title: const Text('Удалить событие?'),
           content: Text(
             'Событие «${event.title}» будет удалено '
             'без возможности восстановления.',
@@ -305,29 +275,19 @@ class _CalendarScreenState
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(false);
+                Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
-                'Отмена',
-              ),
+              child: const Text('Отмена'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(true);
+                Navigator.of(dialogContext).pop(true);
               },
               style: FilledButton.styleFrom(
-                backgroundColor:
-                    AppTheme.danger,
-                minimumSize:
-                    const Size(0, 44),
+                backgroundColor: AppTheme.danger,
+                minimumSize: const Size(0, 44),
               ),
-              child: const Text(
-                'Удалить',
-              ),
+              child: const Text('Удалить'),
             ),
           ],
         );
@@ -339,9 +299,7 @@ class _CalendarScreenState
     }
 
     try {
-      await _personalEventService.deleteEvent(
-        eventId: eventId,
-      );
+      await _personalEventService.deleteEvent(eventId: eventId);
 
       await _loadEvents();
 
@@ -349,45 +307,26 @@ class _CalendarScreenState
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Событие удалено',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Событие удалено')));
     } catch (error) {
-      debugPrint(
-        'Ошибка удаления события: $error',
-      );
+      debugPrint('Ошибка удаления события: $error');
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Не удалось удалить событие',
-          ),
-        ),
+        const SnackBar(content: Text('Не удалось удалить событие')),
       );
     }
   }
 
   Future<void> _previousMonth() async {
     setState(() {
-      _visibleMonth = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month - 1,
-        1,
-      );
+      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month - 1, 1);
 
-      _selectedDate = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month,
-        1,
-      );
+      _selectedDate = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     });
 
     await _loadEvents();
@@ -395,76 +334,38 @@ class _CalendarScreenState
 
   Future<void> _nextMonth() async {
     setState(() {
-      _visibleMonth = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month + 1,
-        1,
-      );
+      _visibleMonth = DateTime(_visibleMonth.year, _visibleMonth.month + 1, 1);
 
-      _selectedDate = DateTime(
-        _visibleMonth.year,
-        _visibleMonth.month,
-        1,
-      );
+      _selectedDate = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
     });
 
     await _loadEvents();
   }
 
-  bool _isSameDay(
-    DateTime first,
-    DateTime second,
-  ) {
+  bool _isSameDay(DateTime first, DateTime second) {
     return first.year == second.year &&
         first.month == second.month &&
         first.day == second.day;
   }
 
-  bool _hasAcademicEventsOnDay(
-    DateTime date,
-  ) {
-    return _academicEvents.any(
-      (event) => _isSameDay(
-        event.date,
-        date,
-      ),
-    );
+  bool _hasAcademicEventsOnDay(DateTime date) {
+    return _academicEvents.any((event) => _isSameDay(event.date, date));
   }
 
-  bool _hasPersonalEventsOnDay(
-    DateTime date,
-  ) {
-    return _personalEvents.any(
-      (event) => _isSameDay(
-        event.date,
-        date,
-      ),
-    );
+  bool _hasPersonalEventsOnDay(DateTime date) {
+    return _personalEvents.any((event) => _isSameDay(event.date, date));
   }
 
-  List<AcademicEvent>
-      _getAcademicEventsForSelectedDay() {
+  List<AcademicEvent> _getAcademicEventsForSelectedDay() {
     return _academicEvents
-        .where(
-          (event) => _isSameDay(
-            event.date,
-            _selectedDate,
-          ),
-        )
+        .where((event) => _isSameDay(event.date, _selectedDate))
         .toList();
   }
 
-  List<PersonalEvent>
-      _getPersonalEventsForSelectedDay() {
-    final List<PersonalEvent> events =
-        _personalEvents
-            .where(
-              (event) => _isSameDay(
-                event.date,
-                _selectedDate,
-              ),
-            )
-            .toList();
+  List<PersonalEvent> _getPersonalEventsForSelectedDay() {
+    final List<PersonalEvent> events = _personalEvents
+        .where((event) => _isSameDay(event.date, _selectedDate))
+        .toList();
 
     events.sort((a, b) {
       if (a.isCompleted == b.isCompleted) {
@@ -490,35 +391,23 @@ class _CalendarScreenState
       0,
     ).day;
 
-    final int emptyDaysBefore =
-        firstDay.weekday - 1;
+    final int emptyDaysBefore = firstDay.weekday - 1;
 
     final List<DateTime?> days = [];
 
-    for (int i = 0;
-        i < emptyDaysBefore;
-        i++) {
+    for (int i = 0; i < emptyDaysBefore; i++) {
       days.add(null);
     }
 
-    for (int day = 1;
-        day <= daysInMonth;
-        day++) {
-      days.add(
-        DateTime(
-          _visibleMonth.year,
-          _visibleMonth.month,
-          day,
-        ),
-      );
+    for (int day = 1; day <= daysInMonth; day++) {
+      days.add(DateTime(_visibleMonth.year, _visibleMonth.month, day));
     }
 
     return days;
   }
 
   IconData _getEventIcon(String type) {
-    final String value =
-        type.toLowerCase();
+    final String value = type.toLowerCase();
 
     if (value.contains('лаборатор')) {
       return Icons.science_outlined;
@@ -545,8 +434,7 @@ class _CalendarScreenState
 
   @override
   Widget build(BuildContext context) {
-    final List<DateTime?> calendarDays =
-        _getCalendarDays();
+    final List<DateTime?> calendarDays = _getCalendarDays();
 
     final List<AcademicEvent> academicEvents =
         _getAcademicEventsForSelectedDay();
@@ -555,8 +443,7 @@ class _CalendarScreenState
         _getPersonalEventsForSelectedDay();
 
     final bool hasSelectedEvents =
-        academicEvents.isNotEmpty ||
-            personalEvents.isNotEmpty;
+        academicEvents.isNotEmpty || personalEvents.isNotEmpty;
 
     return SafeArea(
       child: RefreshIndicator(
@@ -564,8 +451,7 @@ class _CalendarScreenState
         color: AppTheme.primaryBlue,
         backgroundColor: AppTheme.card,
         child: SingleChildScrollView(
-          physics:
-              const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             AppTheme.screenPadding,
             24,
@@ -573,33 +459,22 @@ class _CalendarScreenState
             32,
           ),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   const Expanded(
-                    child: Text(
-                      'Календарь',
-                      style:
-                          AppTheme.pageTitle,
-                    ),
+                    child: Text('Календарь', style: AppTheme.pageTitle),
                   ),
 
                   IconButton.filled(
-                    onPressed:
-                        _openCreatePersonalEvent,
+                    onPressed: _openCreatePersonalEvent,
                     style: IconButton.styleFrom(
-                      backgroundColor:
-                          AppTheme.primaryBlue,
-                      foregroundColor:
-                          Colors.white,
+                      backgroundColor: AppTheme.primaryBlue,
+                      foregroundColor: Colors.white,
                     ),
-                    icon: const Icon(
-                      Icons.add,
-                    ),
-                    tooltip:
-                        'Добавить событие',
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Добавить событие',
                   ),
                 ],
               ),
@@ -610,19 +485,13 @@ class _CalendarScreenState
                 visibleMonth: _visibleMonth,
                 selectedDate: _selectedDate,
                 calendarDays: calendarDays,
-                monthName:
-                    _monthNames[
-                      _visibleMonth.month - 1
-                    ],
+                monthName: _monthNames[_visibleMonth.month - 1],
                 weekdays: _weekdays,
-                onPrevious:
-                    _previousMonth,
+                onPrevious: _previousMonth,
                 onNext: _nextMonth,
                 isSameDay: _isSameDay,
-                hasAcademicEvents:
-                    _hasAcademicEventsOnDay,
-                hasPersonalEvents:
-                    _hasPersonalEventsOnDay,
+                hasAcademicEvents: _hasAcademicEventsOnDay,
+                hasPersonalEvents: _hasPersonalEventsOnDay,
                 onSelectDate: (date) {
                   setState(() {
                     _selectedDate = date;
@@ -635,109 +504,74 @@ class _CalendarScreenState
               Text(
                 'События на ${_selectedDate.day} '
                 '${_monthNamesGenitive[_selectedDate.month - 1]}',
-                style:
-                    AppTheme.sectionTitle,
+                style: AppTheme.sectionTitle,
               ),
 
               const SizedBox(height: 14),
 
               if (_isLoading)
                 const Padding(
-                  padding:
-                      EdgeInsets.all(28),
-                  child: Center(
-                    child:
-                        CircularProgressIndicator(),
-                  ),
+                  padding: EdgeInsets.all(28),
+                  child: Center(child: CircularProgressIndicator()),
                 )
               else if (_hasError)
                 const _CalendarMessageCard(
                   icon: Icons.error_outline,
-                  iconColor:
-                      AppTheme.danger,
-                  title:
-                      'Не удалось загрузить события',
-                  description:
-                      'Попробуйте обновить календарь.',
+                  iconColor: AppTheme.danger,
+                  title: 'Не удалось загрузить события',
+                  description: 'Попробуйте обновить календарь.',
                 )
               else if (!hasSelectedEvents)
-                const _CalendarMessageCard(
-                  icon:
-                      Icons.event_note_outlined,
-                  iconColor:
-                      AppTheme.primaryBlue,
-                  title:
-                      'Событий пока нет',
-                  description:
-                      'На выбранную дату ничего не запланировано.',
+                _CalendarMessageCard(
+                  icon: _groupId == null
+                      ? Icons.groups_outlined
+                      : Icons.event_note_outlined,
+                  iconColor: AppTheme.primaryBlue,
+                  title: _groupId == null
+                      ? 'Учебная группа пока не назначена'
+                      : 'Событий пока нет',
+                  description: _groupId == null
+                      ? 'Учебные события появятся после назначения группы. Личные события можно добавлять самостоятельно.'
+                      : 'На выбранную дату ничего не запланировано.',
                 )
               else ...[
-                if (academicEvents
-                    .isNotEmpty) ...[
+                if (academicEvents.isNotEmpty) ...[
                   const _EventSectionTitle(
-                    title:
-                        'Учебные события',
-                    color:
-                        AppTheme.primaryBlue,
+                    title: 'Учебные события',
+                    color: AppTheme.primaryBlue,
                   ),
 
                   const SizedBox(height: 10),
 
                   ...academicEvents.map(
                     (event) => Padding(
-                      padding:
-                          const EdgeInsets.only(
-                        bottom: 10,
-                      ),
-                      child:
-                          _AcademicEventCard(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _AcademicEventCard(
                         event: event,
-                        icon: _getEventIcon(
-                          event.type,
-                        ),
+                        icon: _getEventIcon(event.type),
                       ),
                     ),
                   ),
                 ],
 
-                if (personalEvents
-                    .isNotEmpty) ...[
-                  if (academicEvents
-                      .isNotEmpty)
-                    const SizedBox(
-                      height: 14,
-                    ),
+                if (personalEvents.isNotEmpty) ...[
+                  if (academicEvents.isNotEmpty) const SizedBox(height: 14),
 
                   const _EventSectionTitle(
-                    title:
-                        'Личные события',
-                    color: AppTheme
-                        .personalEvent,
+                    title: 'Личные события',
+                    color: AppTheme.personalEvent,
                   ),
 
                   const SizedBox(height: 10),
 
                   ...personalEvents.map(
                     (event) => Padding(
-                      padding:
-                          const EdgeInsets.only(
-                        bottom: 10,
-                      ),
-                      child:
-                          _PersonalEventCard(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _PersonalEventCard(
                         event: event,
-                        onToggle: () =>
-                            _togglePersonalEvent(
-                          event,
-                        ),
-                        onEdit: () =>
-                            _editPersonalEvent(
-                          event,
-                        ),
-                        onDelete: () =>
-                            _deletePersonalEvent(
-                          event,
-                        ),
+                        onToggle: () => _togglePersonalEvent(event),
+                        onEdit: () => _editPersonalEvent(event),
+                        onDelete: () => _deletePersonalEvent(event),
                       ),
                     ),
                   ),
@@ -761,19 +595,13 @@ class _CalendarCard extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
-  final bool Function(
-    DateTime,
-    DateTime,
-  ) isSameDay;
+  final bool Function(DateTime, DateTime) isSameDay;
 
-  final bool Function(DateTime)
-      hasAcademicEvents;
+  final bool Function(DateTime) hasAcademicEvents;
 
-  final bool Function(DateTime)
-      hasPersonalEvents;
+  final bool Function(DateTime) hasPersonalEvents;
 
-  final ValueChanged<DateTime>
-      onSelectDate;
+  final ValueChanged<DateTime> onSelectDate;
 
   const _CalendarCard({
     required this.visibleMonth,
@@ -795,17 +623,14 @@ class _CalendarCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         children: [
           Row(
             children: [
               _MonthArrow(
-                icon:
-                    Icons.chevron_left_rounded,
+                icon: Icons.chevron_left_rounded,
                 onPressed: onPrevious,
               ),
 
@@ -813,168 +638,109 @@ class _CalendarCard extends StatelessWidget {
                 child: Text(
                   '$monthName '
                   '${visibleMonth.year}',
-                  textAlign:
-                      TextAlign.center,
-                  style:
-                      AppTheme.sectionTitle,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.sectionTitle,
                 ),
               ),
 
-              _MonthArrow(
-                icon:
-                    Icons.chevron_right_rounded,
-                onPressed: onNext,
-              ),
+              _MonthArrow(icon: Icons.chevron_right_rounded, onPressed: onNext),
             ],
           ),
 
           const SizedBox(height: 18),
 
           Row(
-            children: weekdays.map(
-              (weekday) {
-                return Expanded(
-                  child: Center(
-                    child: Text(
-                      weekday,
-                      style:
-                          AppTheme.labelText
-                              .copyWith(
-                        fontWeight:
-                            FontWeight.w600,
-                      ),
+            children: weekdays.map((weekday) {
+              return Expanded(
+                child: Center(
+                  child: Text(
+                    weekday,
+                    style: AppTheme.labelText.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                );
-              },
-            ).toList(),
+                ),
+              );
+            }).toList(),
           ),
 
           const SizedBox(height: 10),
 
           GridView.builder(
             shrinkWrap: true,
-            physics:
-                const NeverScrollableScrollPhysics(),
-            itemCount:
-                calendarDays.length,
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: calendarDays.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
               mainAxisSpacing: 6,
               crossAxisSpacing: 4,
             ),
-            itemBuilder:
-                (context, index) {
-              final DateTime? day =
-                  calendarDays[index];
+            itemBuilder: (context, index) {
+              final DateTime? day = calendarDays[index];
 
               if (day == null) {
                 return const SizedBox();
               }
 
-              final bool selected =
-                  isSameDay(
-                day,
-                selectedDate,
-              );
+              final bool selected = isSameDay(day, selectedDate);
 
-              final bool today =
-                  isSameDay(
-                day,
-                DateTime.now(),
-              );
+              final bool today = isSameDay(day, DateTime.now());
 
-              final bool academic =
-                  hasAcademicEvents(day);
+              final bool academic = hasAcademicEvents(day);
 
-              final bool personal =
-                  hasPersonalEvents(day);
+              final bool personal = hasPersonalEvents(day);
 
               return Material(
                 color: Colors.transparent,
-                borderRadius:
-                    BorderRadius.circular(
-                  AppTheme.smallRadius,
-                ),
+                borderRadius: BorderRadius.circular(AppTheme.smallRadius),
                 child: InkWell(
-                  onTap: () =>
-                      onSelectDate(day),
-                  borderRadius:
-                      BorderRadius.circular(
-                    AppTheme.smallRadius,
-                  ),
+                  onTap: () => onSelectDate(day),
+                  borderRadius: BorderRadius.circular(AppTheme.smallRadius),
                   child: Container(
                     decoration: BoxDecoration(
                       color: selected
-                          ? AppTheme
-                              .primaryBlue
-                          : Colors
-                              .transparent,
-                      borderRadius:
-                          BorderRadius.circular(
-                        AppTheme
-                            .smallRadius,
-                      ),
-                      border:
-                          today && !selected
-                              ? Border.all(
-                                  color: AppTheme
-                                      .primaryBlue,
-                                )
-                              : null,
+                          ? AppTheme.primaryBlue
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppTheme.smallRadius),
+                      border: today && !selected
+                          ? Border.all(color: AppTheme.primaryBlue)
+                          : null,
                     ),
                     child: Stack(
-                      alignment:
-                          Alignment.center,
+                      alignment: Alignment.center,
                       children: [
                         Text(
                           '${day.day}',
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight:
-                                selected ||
-                                        today
-                                    ? FontWeight
-                                        .bold
-                                    : FontWeight
-                                        .normal,
+                            fontWeight: selected || today
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: selected
                                 ? Colors.white
-                                : AppTheme
-                                    .primaryText,
+                                : AppTheme.primaryText,
                           ),
                         ),
 
-                        if (academic ||
-                            personal)
+                        if (academic || personal)
                           Positioned(
                             bottom: 3,
                             child: Row(
-                              mainAxisSize:
-                                  MainAxisSize
-                                      .min,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (academic)
                                   _EventDot(
-                                    isSelected:
-                                        selected,
-                                    isPersonal:
-                                        false,
+                                    isSelected: selected,
+                                    isPersonal: false,
                                   ),
 
-                                if (academic &&
-                                    personal)
-                                  const SizedBox(
-                                    width: 3,
-                                  ),
+                                if (academic && personal)
+                                  const SizedBox(width: 3),
 
                                 if (personal)
                                   _EventDot(
-                                    isSelected:
-                                        selected,
-                                    isPersonal:
-                                        true,
+                                    isSelected: selected,
+                                    isPersonal: true,
                                   ),
                               ],
                             ),
@@ -996,23 +762,15 @@ class _MonthArrow extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const _MonthArrow({
-    required this.icon,
-    required this.onPressed,
-  });
+  const _MonthArrow({required this.icon, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor:
-            AppTheme.primaryBlue
-                .withValues(
-          alpha: 0.12,
-        ),
-        foregroundColor:
-            AppTheme.primaryBlue,
+        backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.12),
+        foregroundColor: AppTheme.primaryBlue,
       ),
       icon: Icon(icon),
     );
@@ -1023,10 +781,7 @@ class _EventDot extends StatelessWidget {
   final bool isSelected;
   final bool isPersonal;
 
-  const _EventDot({
-    required this.isSelected,
-    required this.isPersonal,
-  });
+  const _EventDot({required this.isSelected, required this.isPersonal});
 
   @override
   Widget build(BuildContext context) {
@@ -1037,25 +792,19 @@ class _EventDot extends StatelessWidget {
         color: isSelected
             ? Colors.white
             : isPersonal
-                ? AppTheme
-                    .personalEvent
-                : AppTheme
-                    .primaryBlue,
+            ? AppTheme.personalEvent
+            : AppTheme.primaryBlue,
         shape: BoxShape.circle,
       ),
     );
   }
 }
 
-class _EventSectionTitle
-    extends StatelessWidget {
+class _EventSectionTitle extends StatelessWidget {
   final String title;
   final Color color;
 
-  const _EventSectionTitle({
-    required this.title,
-    required this.color,
-  });
+  const _EventSectionTitle({required this.title, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1064,31 +813,20 @@ class _EventSectionTitle
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style:
-              AppTheme.cardTitle,
-        ),
+        Text(title, style: AppTheme.cardTitle),
       ],
     );
   }
 }
 
-class _AcademicEventCard
-    extends StatelessWidget {
+class _AcademicEventCard extends StatelessWidget {
   final AcademicEvent event;
   final IconData icon;
 
-  const _AcademicEventCard({
-    required this.event,
-    required this.icon,
-  });
+  const _AcademicEventCard({required this.event, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -1097,55 +835,35 @@ class _AcademicEventCard
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _EventIconBox(
-            icon: icon,
-            color:
-                AppTheme.primaryBlue,
-          ),
+          _EventIconBox(icon: icon, color: AppTheme.primaryBlue),
 
           const SizedBox(width: 14),
 
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   event.type,
                   style: const TextStyle(
-                    color: AppTheme
-                        .primaryBlue,
+                    color: AppTheme.primaryBlue,
                     fontSize: 12,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
 
                 const SizedBox(height: 4),
 
-                Text(
-                  event.title,
-                  style:
-                      AppTheme.cardTitle,
-                ),
+                Text(event.title, style: AppTheme.cardTitle),
 
-                if (event.description
-                    .trim()
-                    .isNotEmpty) ...[
+                if (event.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(
-                    event.description,
-                    style: AppTheme
-                        .secondaryBodyText,
-                  ),
+                  Text(event.description, style: AppTheme.secondaryBodyText),
                 ],
               ],
             ),
@@ -1156,8 +874,7 @@ class _AcademicEventCard
   }
 }
 
-class _PersonalEventCard
-    extends StatelessWidget {
+class _PersonalEventCard extends StatelessWidget {
   final PersonalEvent event;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
@@ -1172,46 +889,34 @@ class _PersonalEventCard
 
   @override
   Widget build(BuildContext context) {
-    final Color eventColor =
-        event.isCompleted
-            ? AppTheme.success
-            : AppTheme.personalEvent;
+    final Color eventColor = event.isCompleted
+        ? AppTheme.success
+        : AppTheme.personalEvent;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
             onTap: onToggle,
-            borderRadius:
-                BorderRadius.circular(50),
+            borderRadius: BorderRadius.circular(50),
             child: Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: eventColor
-                    .withValues(
-                  alpha: 0.12,
-                ),
-                borderRadius:
-                    BorderRadius.circular(
-                  AppTheme.smallRadius,
-                ),
+                color: eventColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.smallRadius),
               ),
               child: Icon(
                 event.isCompleted
                     ? Icons.check_rounded
-                    : Icons
-                        .event_note_outlined,
+                    : Icons.event_note_outlined,
                 color: eventColor,
                 size: 22,
               ),
@@ -1222,18 +927,14 @@ class _PersonalEventCard
 
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  event.isCompleted
-                      ? 'Выполнено'
-                      : 'Личное событие',
+                  event.isCompleted ? 'Выполнено' : 'Личное событие',
                   style: TextStyle(
                     color: eventColor,
                     fontSize: 12,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
 
@@ -1241,37 +942,24 @@ class _PersonalEventCard
 
                 Text(
                   event.title,
-                  style:
-                      AppTheme.cardTitle
-                          .copyWith(
-                    color: event
-                            .isCompleted
-                        ? AppTheme
-                            .secondaryText
-                        : AppTheme
-                            .primaryText,
-                    decoration:
-                        event.isCompleted
-                            ? TextDecoration
-                                .lineThrough
-                            : null,
+                  style: AppTheme.cardTitle.copyWith(
+                    color: event.isCompleted
+                        ? AppTheme.secondaryText
+                        : AppTheme.primaryText,
+                    decoration: event.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
                   ),
                 ),
 
-                if (event.description
-                    .trim()
-                    .isNotEmpty) ...[
+                if (event.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
                     event.description,
-                    style: AppTheme
-                        .secondaryBodyText
-                        .copyWith(
-                      decoration:
-                          event.isCompleted
-                              ? TextDecoration
-                                  .lineThrough
-                              : null,
+                    style: AppTheme.secondaryBodyText.copyWith(
+                      decoration: event.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                   ),
                 ],
@@ -1283,8 +971,7 @@ class _PersonalEventCard
             tooltip: 'Действия',
             icon: const Icon(
               Icons.more_vert_rounded,
-              color:
-                  AppTheme.secondaryText,
+              color: AppTheme.secondaryText,
             ),
             onSelected: (value) {
               if (value == 'edit') {
@@ -1300,13 +987,9 @@ class _PersonalEventCard
                 value: 'edit',
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.edit_outlined,
-                    ),
+                    Icon(Icons.edit_outlined),
                     SizedBox(width: 10),
-                    Text(
-                      'Редактировать',
-                    ),
+                    Text('Редактировать'),
                   ],
                 ),
               ),
@@ -1314,19 +997,9 @@ class _PersonalEventCard
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.delete_outline,
-                      color:
-                          AppTheme.danger,
-                    ),
+                    Icon(Icons.delete_outline, color: AppTheme.danger),
                     SizedBox(width: 10),
-                    Text(
-                      'Удалить',
-                      style: TextStyle(
-                        color:
-                            AppTheme.danger,
-                      ),
-                    ),
+                    Text('Удалить', style: TextStyle(color: AppTheme.danger)),
                   ],
                 ),
               ),
@@ -1342,10 +1015,7 @@ class _EventIconBox extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _EventIconBox({
-    required this.icon,
-    required this.color,
-  });
+  const _EventIconBox({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1353,24 +1023,15 @@ class _EventIconBox extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: color.withValues(
-          alpha: 0.15,
-        ),
-        borderRadius: BorderRadius.circular(
-          AppTheme.smallRadius,
-        ),
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
       ),
-      child: Icon(
-        icon,
-        color: color,
-        size: 22,
-      ),
+      child: Icon(icon, color: color, size: 22),
     );
   }
 }
 
-class _CalendarMessageCard
-    extends StatelessWidget {
+class _CalendarMessageCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -1387,41 +1048,25 @@ class _CalendarMessageCard
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 22,
-        vertical: 26,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         children: [
-          _EventIconBox(
-            icon: icon,
-            color: iconColor,
-          ),
+          _EventIconBox(icon: icon, color: iconColor),
 
           const SizedBox(height: 14),
 
-          Text(
-            title,
-            textAlign:
-                TextAlign.center,
-            style:
-                AppTheme.cardTitle,
-          ),
+          Text(title, textAlign: TextAlign.center, style: AppTheme.cardTitle),
 
           const SizedBox(height: 6),
 
           Text(
             description,
-            textAlign:
-                TextAlign.center,
-            style: AppTheme
-                .secondaryBodyText,
+            textAlign: TextAlign.center,
+            style: AppTheme.secondaryBodyText,
           ),
         ],
       ),

@@ -28,14 +28,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   List<Lesson> lessons = [];
 
-  final List<String> days = const [
-    'Пн',
-    'Вт',
-    'Ср',
-    'Чт',
-    'Пт',
-    'Сб',
-  ];
+  final List<String> days = const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
   late final DateTime currentMonday;
 
@@ -51,8 +44,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       now.day - (now.weekday - DateTime.monday),
     );
 
-    if (now.weekday >= DateTime.monday &&
-        now.weekday <= DateTime.saturday) {
+    if (now.weekday >= DateTime.monday && now.weekday <= DateTime.saturday) {
       selectedDayIndex = now.weekday - 1;
     } else {
       selectedDayIndex = 0;
@@ -62,28 +54,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   DateTime get selectedMonday {
-    return currentMonday.add(
-      Duration(days: weekOffset * 7),
-    );
+    return currentMonday.add(Duration(days: weekOffset * 7));
   }
 
   DateTime get selectedDate {
-    return selectedMonday.add(
-      Duration(days: selectedDayIndex),
-    );
+    return selectedMonday.add(Duration(days: selectedDayIndex));
   }
 
   DateTime getDateForIndex(int index) {
-    return selectedMonday.add(
-      Duration(days: index),
-    );
+    return selectedMonday.add(Duration(days: index));
   }
 
   Future<void> loadStudentGroup() async {
-    setState(() {
-      isLoadingGroup = true;
-      loadingError = null;
-    });
+    if (mounted) {
+      setState(() {
+        isLoadingGroup = true;
+        loadingError = null;
+      });
+    }
 
     try {
       final User? user = FirebaseAuth.instance.currentUser;
@@ -105,45 +93,47 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final Map<String, dynamic>? userData = userDocument.data();
 
       if (userData == null) {
-        throw Exception(
-          'Не удалось получить данные пользователя',
-        );
+        throw Exception('Не удалось получить данные пользователя');
       }
 
-      final String? loadedGroupId =
-          userData['groupId']?.toString();
-
-      if (loadedGroupId == null ||
-          loadedGroupId.trim().isEmpty) {
-        throw Exception(
-          'Учебная группа пользователю не назначена',
-        );
-      }
-
-      groupId = loadedGroupId;
+      final String? loadedGroupId = userData['groupId']?.toString().trim();
 
       if (!mounted) {
         return;
       }
 
+      if (loadedGroupId == null || loadedGroupId.isEmpty) {
+        setState(() {
+          groupId = null;
+          lessons = [];
+          isLoadingGroup = false;
+          isLoadingLessons = false;
+          loadingError = null;
+        });
+
+        return;
+      }
+
       setState(() {
+        groupId = loadedGroupId;
         isLoadingGroup = false;
+        loadingError = null;
       });
 
       await loadLessons();
     } catch (e) {
-      debugPrint(
-        'Ошибка загрузки группы пользователя: $e',
-      );
+      debugPrint('Ошибка загрузки группы пользователя: $e');
 
       if (!mounted) {
         return;
       }
 
       setState(() {
+        groupId = null;
+        lessons = [];
         isLoadingGroup = false;
-        loadingError =
-            'Не удалось определить учебную группу.';
+        isLoadingLessons = false;
+        loadingError = 'Не удалось определить учебную группу.';
       });
     }
   }
@@ -161,8 +151,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
 
     try {
-      final List<Lesson> loadedLessons =
-          await scheduleService.getLessonsForDay(
+      final List<Lesson> loadedLessons = await scheduleService.getLessonsForDay(
         groupId: currentGroupId,
         date: selectedDate,
       );
@@ -176,9 +165,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         isLoadingLessons = false;
       });
     } catch (e) {
-      debugPrint(
-        'Ошибка загрузки расписания: $e',
-      );
+      debugPrint('Ошибка загрузки расписания: $e');
 
       if (!mounted) {
         return;
@@ -226,8 +213,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     setState(() {
       weekOffset = 0;
 
-      if (now.weekday >= DateTime.monday &&
-          now.weekday <= DateTime.saturday) {
+      if (now.weekday >= DateTime.monday && now.weekday <= DateTime.saturday) {
         selectedDayIndex = now.weekday - 1;
       } else {
         selectedDayIndex = 0;
@@ -258,9 +244,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String getWeekTitle() {
     final DateTime monday = selectedMonday;
-    final DateTime saturday = monday.add(
-      const Duration(days: 5),
-    );
+    final DateTime saturday = monday.add(const Duration(days: 5));
 
     if (monday.month == saturday.month) {
       return '${monday.day} – ${saturday.day} '
@@ -312,10 +296,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               AppTheme.screenPadding,
               0,
             ),
-            child: Text(
-              'Расписание',
-              style: AppTheme.pageTitle,
-            ),
+            child: Text('Расписание', style: AppTheme.pageTitle),
           ),
 
           const SizedBox(height: 22),
@@ -349,20 +330,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 return const SizedBox(width: 8);
               },
               itemBuilder: (context, index) {
-                final bool isSelected =
-                    selectedDayIndex == index;
+                final bool isSelected = selectedDayIndex == index;
 
-                final DateTime date =
-                    getDateForIndex(index);
+                final DateTime date = getDateForIndex(index);
 
                 return _DayButton(
                   day: days[index],
                   date: date.day,
                   isSelected: isSelected,
                   isToday: isToday(date),
-                  onTap: isLoadingLessons
-                      ? null
-                      : () => selectDay(index),
+                  onTap: isLoadingLessons ? null : () => selectDay(index),
                 );
               },
             ),
@@ -391,14 +368,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: AppTheme.card,
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.smallRadius,
-                      ),
+                      borderRadius: BorderRadius.circular(AppTheme.smallRadius),
                     ),
-                    child: Text(
-                      groupId!,
-                      style: AppTheme.labelText,
-                    ),
+                    child: Text(groupId!, style: AppTheme.labelText),
                   ),
               ],
             ),
@@ -406,9 +378,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
           const SizedBox(height: 14),
 
-          Expanded(
-            child: buildScheduleContent(),
-          ),
+          Expanded(child: buildScheduleContent()),
         ],
       ),
     );
@@ -416,21 +386,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget buildScheduleContent() {
     if (isLoadingGroup || isLoadingLessons) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (loadingError != null) {
-      return ScheduleError(
-        message: loadingError!,
-        onRetry: () {
-          if (groupId == null) {
-            loadStudentGroup();
-          } else {
-            loadLessons();
-          }
-        },
+      return ScheduleError(message: loadingError!, onRetry: loadStudentGroup);
+    }
+
+    if (groupId == null) {
+      return RefreshIndicator(
+        onRefresh: loadStudentGroup,
+        color: AppTheme.primaryBlue,
+        backgroundColor: AppTheme.card,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.screenPadding,
+            0,
+            AppTheme.screenPadding,
+            32,
+          ),
+          children: const [_GroupNotAssignedCard()],
+        ),
       );
     }
 
@@ -455,10 +432,54 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           return const SizedBox(height: 10);
         },
         itemBuilder: (context, index) {
-          return LessonCard(
-            lesson: lessons[index],
-          );
+          return LessonCard(lesson: lessons[index]);
         },
+      ),
+    );
+  }
+}
+
+class _GroupNotAssignedCard extends StatelessWidget {
+  const _GroupNotAssignedCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+            ),
+            child: const Icon(
+              Icons.groups_outlined,
+              size: 28,
+              color: AppTheme.primaryBlue,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Ожидается назначение группы',
+            textAlign: TextAlign.center,
+            style: AppTheme.sectionTitle,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'После того как администратор назначит вам учебную группу, здесь появится расписание занятий.',
+            textAlign: TextAlign.center,
+            style: AppTheme.secondaryBodyText,
+          ),
+        ],
       ),
     );
   }
@@ -486,15 +507,10 @@ class _WeekSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -511,9 +527,7 @@ class _WeekSelector extends StatelessWidget {
                   : null,
               behavior: HitTestBehavior.opaque,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Column(
                   children: [
                     Text(
@@ -569,11 +583,9 @@ class _ArrowButton extends StatelessWidget {
       onPressed: onPressed,
       tooltip: tooltip,
       style: IconButton.styleFrom(
-        backgroundColor:
-            AppTheme.primaryBlue.withValues(alpha: 0.12),
+        backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.12),
         foregroundColor: AppTheme.primaryBlue,
-        disabledForegroundColor:
-            AppTheme.secondaryText.withValues(alpha: 0.4),
+        disabledForegroundColor: AppTheme.secondaryText.withValues(alpha: 0.4),
       ),
       icon: Icon(icon),
     );
@@ -598,29 +610,18 @@ class _DayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isSelected
-          ? AppTheme.primaryBlue
-          : AppTheme.card,
-      borderRadius: BorderRadius.circular(
-        AppTheme.cardRadius,
-      ),
+      color: isSelected ? AppTheme.primaryBlue : AppTheme.card,
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: 56,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(
-              AppTheme.cardRadius,
-            ),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
             border: isToday && !isSelected
-                ? Border.all(
-                    color: AppTheme.primaryBlue,
-                    width: 1.5,
-                  )
+                ? Border.all(color: AppTheme.primaryBlue, width: 1.5)
                 : null,
           ),
           child: Column(
@@ -630,9 +631,7 @@ class _DayButton extends StatelessWidget {
                 day,
                 style: TextStyle(
                   fontSize: 13,
-                  color: isSelected
-                      ? Colors.white
-                      : AppTheme.secondaryText,
+                  color: isSelected ? Colors.white : AppTheme.secondaryText,
                 ),
               ),
               const SizedBox(height: 5),
@@ -641,9 +640,7 @@ class _DayButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 19,
                   fontWeight: FontWeight.bold,
-                  color: isSelected
-                      ? Colors.white
-                      : AppTheme.primaryText,
+                  color: isSelected ? Colors.white : AppTheme.primaryText,
                 ),
               ),
             ],
@@ -657,33 +654,22 @@ class _DayButton extends StatelessWidget {
 class LessonCard extends StatelessWidget {
   final Lesson lesson;
 
-  const LessonCard({
-    super.key,
-    required this.lesson,
-  });
+  const LessonCard({super.key, required this.lesson});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppTheme.card,
-      borderRadius: BorderRadius.circular(
-        AppTheme.cardRadius,
-      ),
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         onTap: () {
-          final DateTime lessonDate =
-              lesson.date ?? DateTime.now();
+          final DateTime lessonDate = lesson.date ?? DateTime.now();
 
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) {
-                return LessonDetailsScreen(
-                  lesson: lesson,
-                  date: lessonDate,
-                );
+                return LessonDetailsScreen(lesson: lesson, date: lessonDate);
               },
             ),
           );
@@ -697,12 +683,8 @@ class LessonCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(
-                    alpha: 0.15,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.smallRadius,
-                  ),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.smallRadius),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -721,17 +703,11 @@ class LessonCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      lesson.subject,
-                      style: AppTheme.cardTitle,
-                    ),
+                    Text(lesson.subject, style: AppTheme.cardTitle),
 
                     const SizedBox(height: 6),
 
-                    Text(
-                      lesson.time,
-                      style: AppTheme.secondaryBodyText,
-                    ),
+                    Text(lesson.time, style: AppTheme.secondaryBodyText),
 
                     const SizedBox(height: 12),
 
@@ -755,12 +731,8 @@ class LessonCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(
-                          alpha: 0.12,
-                        ),
-                        borderRadius: BorderRadius.circular(
-                          10,
-                        ),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         lesson.type,
@@ -796,37 +768,23 @@ class _LessonInfo extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _LessonInfo({
-    required this.icon,
-    required this.text,
-  });
+  const _LessonInfo({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 18,
-          color: AppTheme.secondaryText,
-        ),
+        Icon(icon, size: 18, color: AppTheme.secondaryText),
         const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            text,
-            style: AppTheme.secondaryBodyText,
-          ),
-        ),
+        Expanded(child: Text(text, style: AppTheme.secondaryBodyText)),
       ],
     );
   }
 }
 
 class EmptySchedule extends StatelessWidget {
-  const EmptySchedule({
-    super.key,
-  });
+  const EmptySchedule({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -840,15 +798,10 @@ class EmptySchedule extends StatelessWidget {
         ),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 30,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
           decoration: BoxDecoration(
             color: AppTheme.card,
-            borderRadius: BorderRadius.circular(
-              AppTheme.cardRadius,
-            ),
+            borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -857,12 +810,8 @@ class EmptySchedule extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(
-                    alpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.cardRadius,
-                  ),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                 ),
                 child: const Icon(
                   Icons.event_available_outlined,
@@ -873,10 +822,7 @@ class EmptySchedule extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              const Text(
-                'Занятий нет',
-                style: AppTheme.sectionTitle,
-              ),
+              const Text('Занятий нет', style: AppTheme.sectionTitle),
 
               const SizedBox(height: 6),
 
@@ -918,9 +864,7 @@ class ScheduleError extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppTheme.card,
-          borderRadius: BorderRadius.circular(
-            AppTheme.cardRadius,
-          ),
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         ),
         child: Column(
           children: [
@@ -928,12 +872,8 @@ class ScheduleError extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: AppTheme.danger.withValues(
-                  alpha: 0.12,
-                ),
-                borderRadius: BorderRadius.circular(
-                  AppTheme.cardRadius,
-                ),
+                color: AppTheme.danger.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.cardRadius),
               ),
               child: const Icon(
                 Icons.error_outline,
