@@ -252,8 +252,10 @@ class SchedulePublishResult {
 }
 
 class AdminApiService {
-  static const String _baseUrl = 'http://127.0.0.1:8000';
-
+  static const String _baseUrl = String.fromEnvironment(
+    'ADMIN_API_BASE_URL',
+    defaultValue: 'https://studenthelper-production-9d49.up.railway.app',
+  );
   static Future<String> _getIdToken() async {
     final User? user = FirebaseAuth.instance.currentUser;
 
