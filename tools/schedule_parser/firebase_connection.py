@@ -1,3 +1,5 @@
+import json
+import os
 from pathlib import Path
 
 import firebase_admin
@@ -10,25 +12,27 @@ SERVICE_ACCOUNT_PATH = (
     BASE_DIR / "service-account.json"
 )
 
+FIREBASE_SERVICE_ACCOUNT_ENV = (
+    "FIREBASE_SERVICE_ACCOUNT_JSON"
+)
+
 
 def initialize_firebase() -> None:
     """
     Инициализирует Firebase Admin SDK.
 
-    Локальная разработка:
-    используется service-account.json,
-    если файл существует.
+    Приоритет авторизации:
 
-    Production:
-    если локального файла нет,
-    Firebase Admin SDK использует
-    Application Default Credentials
-    окружения сервера.
+    1. Локальный service-account.json.
+    2. FIREBASE_SERVICE_ACCOUNT_JSON
+       из переменной окружения.
+    3. Application Default Credentials.
     """
 
     if firebase_admin._apps:
         return
 
+    # Локальная разработка.
     if SERVICE_ACCOUNT_PATH.exists():
         credential = credentials.Certificate(
             str(SERVICE_ACCOUNT_PATH)
@@ -40,6 +44,37 @@ def initialize_firebase() -> None:
 
         return
 
+    # Production на Render и других
+    # внешних хостингах.
+    service_account_json = os.getenv(
+        FIREBASE_SERVICE_ACCOUNT_ENV
+    )
+
+    if service_account_json:
+        try:
+            service_account_info = json.loads(
+                service_account_json
+            )
+        except json.JSONDecodeError as error:
+            raise RuntimeError(
+                "Переменная "
+                "FIREBASE_SERVICE_ACCOUNT_JSON "
+                "содержит некорректный JSON."
+            ) from error
+
+        credential = credentials.Certificate(
+            service_account_info
+        )
+
+        firebase_admin.initialize_app(
+            credential
+        )
+
+        return
+
+    # Google Cloud и другие окружения,
+    # поддерживающие Application Default
+    # Credentials.
     firebase_admin.initialize_app()
 
 
@@ -59,6 +94,15 @@ def test_connection() -> None:
             "Авторизация: "
             "локальный service-account.json"
         )
+
+    elif os.getenv(
+        FIREBASE_SERVICE_ACCOUNT_ENV
+    ):
+        print(
+            "Авторизация: "
+            "FIREBASE_SERVICE_ACCOUNT_JSON"
+        )
+
     else:
         print(
             "Авторизация: "
@@ -71,11 +115,6 @@ def test_connection() -> None:
 
     db = get_firestore_client()
 
-    # Получаем небольшое количество документов
-    # только для проверки чтения.
-    #
-    # Никаких записей, изменений или удалений
-    # этот код не выполняет.
     documents = (
         db.collection("teachers")
         .limit(3)
