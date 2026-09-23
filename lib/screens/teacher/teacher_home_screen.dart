@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'teacher_calendar_screen.dart';
 import 'teacher_schedule_screen.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
@@ -14,11 +15,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
   final List<Widget> screens = const [
     TeacherScheduleScreen(),
-    _TeacherPlaceholderScreen(
-      icon: Icons.calendar_month_outlined,
-      title: 'Календарь',
-      description: 'Календарь преподавателя будет добавлен позже.',
-    ),
+    TeacherCalendarScreen(),
     _TeacherPlaceholderScreen(
       icon: Icons.people_outline,
       title: 'Контакты',
