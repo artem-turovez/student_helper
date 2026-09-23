@@ -56,7 +56,7 @@ db = firestore.client()
 
 app = FastAPI(
     title="Student Helper Schedule API",
-    version="1.7.0",
+    version="1.8.0",
 )
 
 
@@ -259,6 +259,201 @@ def serialize_user(
             data.get("createdAt")
         ),
     }
+
+
+def build_student_public_profile(
+    user_data: dict,
+    existing_data: dict | None = None,
+) -> dict:
+    existing_data = existing_data or {}
+
+    return {
+        "name": normalize_optional_text(
+            user_data.get("name")
+        ),
+        "email": normalize_optional_text(
+            user_data.get("email")
+        ),
+        "groupId": normalize_optional_text(
+            user_data.get("groupId")
+        ),
+        "phone": existing_data.get(
+            "phone"
+        ),
+        "telegram": existing_data.get(
+            "telegram"
+        ),
+        "photoUrl": existing_data.get(
+            "photoUrl"
+        ),
+    }
+
+
+def sync_student_public_profile(
+    uid: str,
+    user_data: dict,
+) -> None:
+    """
+    Синхронизирует users/{uid} и
+    publicProfiles/{uid}.
+
+    Для учащегося публичный профиль создаётся
+    или обновляется.
+
+    Для преподавателя или администратора
+    студенческий публичный профиль удаляется.
+    """
+
+    role = str(
+        user_data.get("role") or ""
+    ).strip().lower()
+
+    public_reference = (
+        db.collection("publicProfiles")
+        .document(uid)
+    )
+
+    if role != "student":
+        public_reference.delete()
+        return
+
+    snapshot = public_reference.get()
+
+    existing_data = (
+        snapshot.to_dict()
+        if snapshot.exists
+        else {}
+    ) or {}
+
+    profile_data = (
+        build_student_public_profile(
+            user_data,
+            existing_data,
+        )
+    )
+
+    public_reference.set(
+        profile_data,
+        merge=True,
+    )
+
+
+def sync_all_student_public_profiles() -> dict[str, int]:
+    """
+    Синхронизирует публичные профили
+    всех существующих учащихся.
+
+    Используется для восстановления
+    publicProfiles у аккаунтов, созданных
+    до автоматической синхронизации.
+    """
+
+    user_documents = list(
+        db.collection("users").stream()
+    )
+
+    student_count = 0
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+
+    for document in user_documents:
+        user_data = document.to_dict() or {}
+
+        role = str(
+            user_data.get("role") or ""
+        ).strip().lower()
+
+        if role != "student":
+            continue
+
+        student_count += 1
+
+        group_id = normalize_optional_text(
+            user_data.get("groupId")
+        )
+
+        if group_id is None:
+            print(
+                "Пропущен учащийся без группы:",
+                document.id,
+            )
+
+            skipped_count += 1
+            continue
+
+        public_reference = (
+            db.collection("publicProfiles")
+            .document(document.id)
+        )
+
+        public_snapshot = (
+            public_reference.get()
+        )
+
+        existed_before = (
+            public_snapshot.exists
+        )
+
+        sync_student_public_profile(
+            document.id,
+            user_data,
+        )
+
+        if existed_before:
+            updated_count += 1
+        else:
+            created_count += 1
+
+    return {
+        "students": student_count,
+        "created": created_count,
+        "updated": updated_count,
+        "skipped": skipped_count,
+    }
+
+
+@app.post("/admin/users/sync-public-profiles")
+async def sync_admin_student_public_profiles(
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        result = (
+            sync_all_student_public_profiles()
+        )
+
+        return {
+            "status": "ok",
+            "message": (
+                "Публичные профили учащихся "
+                "синхронизированы"
+            ),
+            "result": result,
+            "syncedBy": {
+                "uid": admin["uid"],
+                "email": admin.get(
+                    "email"
+                ),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка синхронизации "
+            "публичных профилей:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось синхронизировать "
+                "публичные профили учащихся."
+            ),
+        )
 
 
 def build_teacher_links() -> dict[str, dict]:
@@ -792,6 +987,8 @@ async def create_admin_user(
     admin: dict = Depends(require_admin),
 ) -> dict:
     created_auth_uid: str | None = None
+    reference = None
+    public_reference = None
 
     try:
         name = normalize_optional_text(
@@ -928,7 +1125,58 @@ async def create_admin_user(
                 merge=False,
             )
 
+            created_snapshot = (
+                reference.get()
+            )
+
+            created_data = (
+                created_snapshot.to_dict()
+                or user_data
+            )
+
+            sync_student_public_profile(
+                firebase_user.uid,
+                created_data,
+            )
+
+            if role == "student":
+                public_reference = (
+                    db.collection(
+                        "publicProfiles"
+                    )
+                    .document(
+                        created_auth_uid
+                    )
+                )
+
         except Exception:
+            if public_reference is not None:
+                try:
+                    public_reference.delete()
+
+                except Exception as rollback_error:
+                    print(
+                        "Не удалось удалить "
+                        "publicProfiles "
+                        "при откате:",
+                        repr(
+                            rollback_error
+                        ),
+                    )
+
+            if reference is not None:
+                try:
+                    reference.delete()
+
+                except Exception as rollback_error:
+                    print(
+                        "Не удалось удалить "
+                        "users при откате:",
+                        repr(
+                            rollback_error
+                        ),
+                    )
+
             try:
                 auth.delete_user(
                     created_auth_uid
@@ -938,21 +1186,14 @@ async def create_admin_user(
                 print(
                     "Не удалось выполнить "
                     "откат Firebase Auth:",
-                    repr(rollback_error),
+                    repr(
+                        rollback_error
+                    ),
                 )
 
             created_auth_uid = None
 
             raise
-
-        created_snapshot = (
-            reference.get()
-        )
-
-        created_data = (
-            created_snapshot.to_dict()
-            or user_data
-        )
 
         return {
             "status": "ok",
@@ -982,6 +1223,33 @@ async def create_admin_user(
         )
 
         if created_auth_uid is not None:
+            if public_reference is not None:
+                try:
+                    public_reference.delete()
+
+                except Exception as rollback_error:
+                    print(
+                        "Не удалось удалить "
+                        "publicProfiles "
+                        "при откате:",
+                        repr(
+                            rollback_error
+                        ),
+                    )
+
+            if reference is not None:
+                try:
+                    reference.delete()
+
+                except Exception as rollback_error:
+                    print(
+                        "Не удалось удалить "
+                        "users при откате:",
+                        repr(
+                            rollback_error
+                        ),
+                    )
+
             try:
                 auth.delete_user(
                     created_auth_uid
@@ -991,7 +1259,9 @@ async def create_admin_user(
                 print(
                     "Не удалось выполнить "
                     "откат Firebase Auth:",
-                    repr(rollback_error),
+                    repr(
+                        rollback_error
+                    ),
                 )
 
         raise HTTPException(
@@ -1100,6 +1370,11 @@ async def update_admin_user(
         updated_data = (
             updated_snapshot.to_dict()
             or {}
+        )
+
+        sync_student_public_profile(
+            uid,
+            updated_data,
         )
 
         return {

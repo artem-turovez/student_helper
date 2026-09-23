@@ -128,6 +128,42 @@ class AdminTeacher {
   }
 }
 
+class PublicProfilesSyncResult {
+  const PublicProfilesSyncResult({
+    required this.status,
+    required this.message,
+    required this.studentCount,
+    required this.createdCount,
+    required this.updatedCount,
+    required this.skippedCount,
+  });
+
+  final String status;
+  final String message;
+
+  final int studentCount;
+  final int createdCount;
+  final int updatedCount;
+  final int skippedCount;
+
+  factory PublicProfilesSyncResult.fromJson(Map<String, dynamic> json) {
+    final dynamic rawResult = json['result'];
+
+    final Map<String, dynamic> result = rawResult is Map
+        ? Map<String, dynamic>.from(rawResult)
+        : <String, dynamic>{};
+
+    return PublicProfilesSyncResult(
+      status: json['status'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      studentCount: result['students'] as int? ?? 0,
+      createdCount: result['created'] as int? ?? 0,
+      updatedCount: result['updated'] as int? ?? 0,
+      skippedCount: result['skipped'] as int? ?? 0,
+    );
+  }
+}
+
 class ScheduleCheckResult {
   const ScheduleCheckResult({
     required this.status,
@@ -255,7 +291,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось подключиться к серверу: $error');
+      throw AdminApiException(
+        'Не удалось подключиться к серверу: '
+        '$error',
+      );
     }
   }
 
@@ -280,7 +319,8 @@ class AdminApiService {
 
       if (rawUsers is! List) {
         throw const AdminApiException(
-          'Сервер вернул некорректный список пользователей.',
+          'Сервер вернул некорректный '
+          'список пользователей.',
         );
       }
 
@@ -291,7 +331,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось загрузить пользователей: $error');
+      throw AdminApiException(
+        'Не удалось загрузить '
+        'пользователей: $error',
+      );
     }
   }
 
@@ -334,7 +377,8 @@ class AdminApiService {
 
       if (rawUser is! Map) {
         throw const AdminApiException(
-          'Сервер вернул некорректные данные пользователя.',
+          'Сервер вернул некорректные '
+          'данные пользователя.',
         );
       }
 
@@ -342,7 +386,41 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось создать пользователя: $error');
+      throw AdminApiException(
+        'Не удалось создать '
+        'пользователя: $error',
+      );
+    }
+  }
+
+  static Future<PublicProfilesSyncResult> syncPublicProfiles() async {
+    final String token = await _getIdToken();
+
+    try {
+      final http.Response response = await http.post(
+        Uri.parse(
+          '$_baseUrl/admin/users/'
+          'sync-public-profiles',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final Map<String, dynamic> data = _decodeResponse(response);
+
+      if (response.statusCode != 200) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+
+      return PublicProfilesSyncResult.fromJson(data);
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException(
+        'Не удалось синхронизировать '
+        'публичные профили: $error',
+      );
     }
   }
 
@@ -367,7 +445,8 @@ class AdminApiService {
 
       if (rawTeachers is! List) {
         throw const AdminApiException(
-          'Сервер вернул некорректный список преподавателей.',
+          'Сервер вернул некорректный '
+          'список преподавателей.',
         );
       }
 
@@ -378,7 +457,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось загрузить преподавателей: $error');
+      throw AdminApiException(
+        'Не удалось загрузить '
+        'преподавателей: $error',
+      );
     }
   }
 
@@ -393,7 +475,10 @@ class AdminApiService {
 
     try {
       final http.Response response = await http.patch(
-        Uri.parse('$_baseUrl/admin/users/${Uri.encodeComponent(uid)}'),
+        Uri.parse(
+          '$_baseUrl/admin/users/'
+          '${Uri.encodeComponent(uid)}',
+        ),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json; charset=UTF-8',
@@ -418,7 +503,8 @@ class AdminApiService {
 
       if (rawUser is! Map) {
         throw const AdminApiException(
-          'Сервер вернул некорректные данные пользователя.',
+          'Сервер вернул некорректные '
+          'данные пользователя.',
         );
       }
 
@@ -426,7 +512,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось сохранить пользователя: $error');
+      throw AdminApiException(
+        'Не удалось сохранить '
+        'пользователя: $error',
+      );
     }
   }
 
@@ -471,7 +560,8 @@ class AdminApiService {
 
       if (rawTeacher is! Map) {
         throw const AdminApiException(
-          'Сервер вернул некорректные данные преподавателя.',
+          'Сервер вернул некорректные '
+          'данные преподавателя.',
         );
       }
 
@@ -479,7 +569,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось сохранить преподавателя: $error');
+      throw AdminApiException(
+        'Не удалось сохранить '
+        'преподавателя: $error',
+      );
     }
   }
 
@@ -511,7 +604,8 @@ class AdminApiService {
 
     if (filePath == null || filePath.isEmpty) {
       throw const AdminApiException(
-        'Не удалось получить путь к выбранному PDF-файлу.',
+        'Не удалось получить путь '
+        'к выбранному PDF-файлу.',
       );
     }
 
@@ -546,7 +640,10 @@ class AdminApiService {
     } on AdminApiException {
       rethrow;
     } catch (error) {
-      throw AdminApiException('Не удалось подключиться к серверу: $error');
+      throw AdminApiException(
+        'Не удалось подключиться '
+        'к серверу: $error',
+      );
     }
   }
 
@@ -577,6 +674,7 @@ class AdminApiService {
       return detail;
     }
 
-    return 'Ошибка сервера (HTTP $statusCode).';
+    return 'Ошибка сервера '
+        '(HTTP $statusCode).';
   }
 }
