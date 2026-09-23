@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import tempfile
+
+import cloudinary
+import cloudinary.uploader
 
 from fastapi import (
     Depends,
@@ -29,6 +33,20 @@ MAX_PDF_SIZE = 15 * 1024 * 1024
 # Firestore допускает до 500 операций записи в одном batch.
 # Оставляем небольшой запас.
 MAX_BATCH_OPERATIONS = 450
+MAX_PROFILE_PHOTO_SIZE = 5 * 1024 * 1024
+
+ALLOWED_PROFILE_PHOTO_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
 
 
 db = get_firestore_client()
@@ -54,7 +72,7 @@ def health() -> dict[str, str]:
     }
 
 
-async def require_admin(
+async def require_user(
     authorization: str | None = Header(
         default=None
     ),
@@ -62,9 +80,7 @@ async def require_admin(
     if authorization is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Отсутствует Authorization header"
-            ),
+            detail="Отсутствует Authorization header",
         )
 
     prefix = "Bearer "
@@ -85,9 +101,7 @@ async def require_admin(
     if not id_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                "Firebase ID token отсутствует"
-            ),
+            detail="Firebase ID token отсутствует",
         )
 
     try:
@@ -131,7 +145,29 @@ async def require_admin(
 
     user_data = user_document.to_dict() or {}
 
-    if user_data.get("role") != "admin":
+    group_id = str(
+        user_data.get("groupId") or ""
+    ).strip()
+
+    teacher_id = str(
+        user_data.get("teacherId") or ""
+    ).strip()
+
+    return {
+        "uid": uid,
+        "email": decoded_token.get("email"),
+        "role": str(
+            user_data.get("role") or ""
+        ).strip().lower(),
+        "groupId": group_id or None,
+        "teacherId": teacher_id or None,
+    }
+
+
+async def require_admin(
+    user: dict = Depends(require_user),
+) -> dict:
+    if user.get("role") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -140,11 +176,7 @@ async def require_admin(
             ),
         )
 
-    return {
-        "uid": uid,
-        "email": decoded_token.get("email"),
-        "role": "admin",
-    }
+    return user
 
 
 @app.get("/admin/check")
@@ -391,7 +423,208 @@ def sync_all_student_public_profiles() -> dict[str, int]:
         "skipped": skipped_count,
     }
 
+@app.post("/profile/photo")
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),
+) -> dict:
+    try:
+        role = user.get("role")
+        uid = user["uid"]
 
+        if role not in {
+            "student",
+            "teacher",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Загрузка фотографии "
+                    "для этой роли недоступна."
+                ),
+            )
+
+        content_type = (
+            file.content_type or ""
+        ).lower()
+
+        if (
+            content_type
+            not in ALLOWED_PROFILE_PHOTO_TYPES
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Разрешены только "
+                    "JPEG, PNG и WebP."
+                ),
+            )
+
+        contents = await file.read()
+
+        if not contents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Файл изображения пуст.",
+            )
+
+        if (
+            len(contents)
+            > MAX_PROFILE_PHOTO_SIZE
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=(
+                    "Изображение слишком большое. "
+                    "Максимальный размер — 5 МБ."
+                ),
+            )
+
+        if not all(
+            [
+                os.environ.get(
+                    "CLOUDINARY_CLOUD_NAME"
+                ),
+                os.environ.get(
+                    "CLOUDINARY_API_KEY"
+                ),
+                os.environ.get(
+                    "CLOUDINARY_API_SECRET"
+                ),
+            ]
+        ):
+            raise RuntimeError(
+                "Cloudinary не настроен."
+            )
+
+        if role == "student":
+            profile_reference = (
+                db.collection("publicProfiles")
+                .document(uid)
+            )
+
+            profile_snapshot = (
+                profile_reference.get()
+            )
+
+            if not profile_snapshot.exists:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Публичный профиль "
+                        "учащегося ещё не создан."
+                    ),
+                )
+
+            public_id = (
+                f"student_helper/"
+                f"students/{uid}/profile"
+            )
+
+        else:
+            teacher_id = user.get(
+                "teacherId"
+            )
+
+            if not teacher_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Аккаунт преподавателя "
+                        "не привязан к профилю."
+                    ),
+                )
+
+            profile_reference = (
+                db.collection("teachers")
+                .document(teacher_id)
+            )
+
+            profile_snapshot = (
+                profile_reference.get()
+            )
+
+            if not profile_snapshot.exists:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=(
+                        "Профиль преподавателя "
+                        "не найден."
+                    ),
+                )
+
+            public_id = (
+                f"student_helper/"
+                f"teachers/{teacher_id}/profile"
+            )
+
+        upload_result = (
+            cloudinary.uploader.upload(
+                contents,
+                public_id=public_id,
+                overwrite=True,
+                invalidate=True,
+                resource_type="image",
+                transformation=[
+                    {
+                        "width": 800,
+                        "height": 800,
+                        "crop": "limit",
+                    },
+                    {
+                        "quality": "auto",
+                        "fetch_format": "auto",
+                    },
+                ],
+            )
+        )
+
+        photo_url = str(
+            upload_result.get(
+                "secure_url"
+            )
+            or ""
+        ).strip()
+
+        if not photo_url:
+            raise RuntimeError(
+                "Cloudinary не вернул URL."
+            )
+
+        profile_reference.update(
+            {
+                "photoUrl": photo_url,
+            }
+        )
+
+        return {
+            "status": "ok",
+            "message": (
+                "Фотография профиля "
+                "обновлена."
+            ),
+            "photoUrl": photo_url,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка загрузки фотографии:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось загрузить "
+                "фотографию профиля."
+            ),
+        )
+
+    finally:
+        await file.close()
 @app.post("/admin/users/sync-public-profiles")
 async def sync_admin_student_public_profiles(
     admin: dict = Depends(require_admin),
