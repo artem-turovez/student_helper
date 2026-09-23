@@ -609,11 +609,7 @@ class _MessageCard extends StatelessWidget {
               color: AppTheme.primaryBlue.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(AppTheme.smallRadius),
             ),
-            child: const Icon(
-              Icons.info_outline,
-              size: 22,
-              color: AppTheme.secondaryText,
-            ),
+            child: Icon(icon, size: 22, color: AppTheme.secondaryText),
           ),
           const SizedBox(width: 14),
           Expanded(child: Text(text, style: AppTheme.secondaryBodyText)),
