@@ -20,6 +20,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
   late String _role;
 
   bool _isSaving = false;
+  bool _isDeleting = false;
   bool _isLoadingTeachers = false;
 
   String? _teachersError;
@@ -195,7 +196,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
   }
 
   Future<void> _save() async {
-    if (_isSaving) {
+    if (_isSaving || _isDeleting) {
       return;
     }
 
@@ -240,7 +241,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
     });
 
     try {
-      final AdminUser updatedUser = await AdminApiService.updateUser(
+      await AdminApiService.updateUser(
         uid: widget.user.uid,
         name: _normalizedText(_nameController),
         role: _role,
@@ -252,7 +253,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
         return;
       }
 
-      Navigator.of(context).pop(updatedUser);
+      Navigator.of(context).pop('updated');
     } on AdminApiException catch (error) {
       if (!mounted) {
         return;
@@ -277,6 +278,100 @@ class _UserEditScreenState extends State<UserEditScreen> {
       if (mounted) {
         setState(() {
           _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteUser() async {
+    if (_isSaving || _isDeleting) {
+      return;
+    }
+
+    if (_isCurrentUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Нельзя удалить собственный аккаунт.')),
+      );
+
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Удалить пользователя?'),
+          content: Text(
+            'Аккаунт ${widget.user.displayName} '
+            'будет удалён без возможности '
+            'восстановления.\n\n'
+            'Также будут удалены его личные '
+            'события и публичный профиль.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      await AdminApiService.deleteUser(uid: widget.user.uid);
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pop('deleted');
+    } on AdminApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Не удалось удалить '
+            'пользователя: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
         });
       }
     }
@@ -419,7 +514,7 @@ class _UserEditScreenState extends State<UserEditScreen> {
             SizedBox(
               height: 52,
               child: FilledButton.icon(
-                onPressed: _isSaving ? null : _save,
+                onPressed: _isSaving || _isDeleting ? null : _save,
                 icon: _isSaving
                     ? const SizedBox(
                         width: 20,
@@ -428,13 +523,63 @@ class _UserEditScreenState extends State<UserEditScreen> {
                       )
                     : const Icon(Icons.save_rounded),
                 label: Text(
-                  _isSaving
-                      ? 'Сохранение...'
-                      : 'Сохранить '
-                            'изменения',
+                  _isSaving ? 'Сохранение...' : 'Сохранить изменения',
                 ),
               ),
             ),
+
+            const SizedBox(height: 16),
+
+            if (!_isCurrentUser)
+              SizedBox(
+                height: 52,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                  onPressed: _isSaving || _isDeleting ? null : _deleteUser,
+                  icon: _isDeleting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline_rounded),
+                  label: Text(
+                    _isDeleting ? 'Удаление...' : 'Удалить пользователя',
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 20,
+                      color: AppTheme.secondaryText,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Собственный административный '
+                        'аккаунт удалить нельзя.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.secondaryText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 24),
           ],

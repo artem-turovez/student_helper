@@ -519,6 +519,35 @@ class AdminApiService {
     }
   }
 
+  static Future<void> deleteUser({required String uid}) async {
+    final String token = await _getIdToken();
+
+    try {
+      final http.Response response = await http.delete(
+        Uri.parse(
+          '$_baseUrl/admin/users/'
+          '${Uri.encodeComponent(uid)}',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final Map<String, dynamic> data = _decodeResponse(response);
+
+      if (response.statusCode != 200) {
+        throw AdminApiException(
+          _extractErrorMessage(data, response.statusCode),
+        );
+      }
+    } on AdminApiException {
+      rethrow;
+    } catch (error) {
+      throw AdminApiException(
+        'Не удалось удалить '
+        'пользователя: $error',
+      );
+    }
+  }
+
   static Future<AdminTeacher> updateTeacher({
     required String teacherId,
     required String name,

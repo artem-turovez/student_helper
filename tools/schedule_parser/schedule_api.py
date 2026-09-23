@@ -1412,6 +1412,146 @@ async def update_admin_user(
             ),
         )
 
+@app.delete("/admin/users/{uid}")
+async def delete_admin_user(
+    uid: str,
+    admin: dict = Depends(require_admin),
+) -> dict:
+    try:
+        uid = uid.strip()
+
+        if not uid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "UID пользователя "
+                    "не указан."
+                ),
+            )
+
+        if uid == admin["uid"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Нельзя удалить собственный "
+                    "административный аккаунт."
+                ),
+            )
+
+        user_reference = (
+            db.collection("users")
+            .document(uid)
+        )
+
+        user_snapshot = user_reference.get()
+
+        if not user_snapshot.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Пользователь не найден."
+                ),
+            )
+
+        # Сначала удаляем Firebase Auth.
+        # После этого пользователь больше
+        # не сможет войти в приложение.
+        try:
+            auth.delete_user(uid)
+
+        except auth.UserNotFoundError:
+            # Firestore-профиль может
+            # существовать без Auth-аккаунта.
+            # В таком случае продолжаем
+            # очистку Firestore.
+            pass
+
+        personal_events = (
+            db.collection("personalEvents")
+            .where(
+                filter=FieldFilter(
+                    "userId",
+                    "==",
+                    uid,
+                )
+            )
+            .stream()
+        )
+
+        deleted_personal_events = 0
+
+        batch = db.batch()
+        batch_operations = 0
+
+        for event_document in personal_events:
+            batch.delete(
+                event_document.reference
+            )
+
+            batch_operations += 1
+            deleted_personal_events += 1
+
+            if (
+                batch_operations
+                >= MAX_BATCH_OPERATIONS
+            ):
+                batch.commit()
+
+                batch = db.batch()
+                batch_operations = 0
+
+        if batch_operations > 0:
+            batch.commit()
+
+        # users удаляется последним.
+        # Если очистка выше завершится
+        # ошибкой, операцию можно будет
+        # безопасно повторить.
+        final_batch = db.batch()
+
+        final_batch.delete(
+            db.collection("publicProfiles")
+            .document(uid)
+        )
+
+        final_batch.delete(
+            user_reference
+        )
+
+        final_batch.commit()
+
+        return {
+            "status": "ok",
+            "message": (
+                "Пользователь успешно удалён"
+            ),
+            "uid": uid,
+            "deletedPersonalEvents": (
+                deleted_personal_events
+            ),
+            "deletedBy": {
+                "uid": admin["uid"],
+                "email": admin.get("email"),
+            },
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "Ошибка удаления пользователя:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Не удалось удалить "
+                "пользователя."
+            ),
+        )
+
 
 async def read_pdf_upload(
     file: UploadFile,

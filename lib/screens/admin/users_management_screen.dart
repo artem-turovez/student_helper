@@ -88,28 +88,33 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
   }
 
   Future<void> _openUser(AdminUser user) async {
-    final AdminUser? updatedUser = await Navigator.of(context).push<AdminUser>(
+    final String? result = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (context) => UserEditScreen(user: user)),
     );
 
-    if (updatedUser == null || !mounted) {
+    if (result == null || !mounted) {
       return;
     }
 
-    setState(() {
-      _users = _users
-          .map(
-            (currentUser) =>
-                currentUser.uid == updatedUser.uid ? updatedUser : currentUser,
-          )
-          .toList();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Данные пользователя сохранены.')),
-    );
-
     await _loadUsers();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (result == 'deleted') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Пользователь ${user.displayName} удалён.')),
+      );
+
+      return;
+    }
+
+    if (result == 'updated') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Данные пользователя сохранены.')),
+      );
+    }
   }
 
   String _roleTitle(String? role) {
