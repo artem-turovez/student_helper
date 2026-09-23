@@ -14,22 +14,20 @@ class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
 
   @override
-  State<ContactsScreen> createState() =>
-      _ContactsScreenState();
+  State<ContactsScreen> createState() => _ContactsScreenState();
 }
 
 class _ContactsScreenState extends State<ContactsScreen> {
-  final PublicProfileService _publicProfileService =
-      PublicProfileService();
-
-  final TeacherService _teacherService =
-      TeacherService();
+  final PublicProfileService _publicProfileService = PublicProfileService();
+  final TeacherService _teacherService = TeacherService();
 
   List<PublicProfile> _classmates = [];
   List<Teacher> _teachers = [];
 
   bool _isLoading = true;
-  bool _hasError = false;
+  bool _classmatesHasError = false;
+  bool _teachersHasError = false;
+  bool _groupIsNotAssigned = false;
 
   int _selectedList = 0;
 
@@ -43,72 +41,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
     if (mounted) {
       setState(() {
         _isLoading = true;
-        _hasError = false;
+        _classmatesHasError = false;
+        _teachersHasError = false;
+        _groupIsNotAssigned = false;
       });
     }
 
-    try {
-      final User? user =
-          FirebaseAuth.instance.currentUser;
+    final User? user = FirebaseAuth.instance.currentUser;
 
-      if (user == null) {
-        throw Exception(
-          'Пользователь не авторизован',
-        );
-      }
-
-      final DocumentSnapshot<Map<String, dynamic>>
-          userDocument =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-
-      if (!userDocument.exists) {
-        throw Exception(
-          'Профиль пользователя не найден',
-        );
-      }
-
-      final Map<String, dynamic>? userData =
-          userDocument.data();
-
-      final String? groupId =
-          userData?['groupId']?.toString();
-
-      if (groupId == null ||
-          groupId.trim().isEmpty) {
-        throw Exception(
-          'Учебная группа не назначена',
-        );
-      }
-
-      final List<PublicProfile> classmates =
-          await _publicProfileService.getClassmates(
-        groupId: groupId,
-        currentUserId: user.uid,
-      );
-
-      final List<Teacher> teachers =
-          await _teacherService.getTeachersForGroup(
-        groupId,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _classmates = classmates;
-        _teachers = teachers;
-
-        _isLoading = false;
-        _hasError = false;
-      });
-    } catch (error) {
-      debugPrint(
-        'Ошибка загрузки контактов: $error',
-      );
+    if (user == null) {
+      debugPrint('Контакты: пользователь не авторизован');
 
       if (!mounted) {
         return;
@@ -117,35 +59,132 @@ class _ContactsScreenState extends State<ContactsScreen> {
       setState(() {
         _classmates = [];
         _teachers = [];
-
+        _classmatesHasError = true;
+        _teachersHasError = true;
         _isLoading = false;
-        _hasError = true;
       });
+
+      return;
     }
+
+    String? groupId;
+
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+
+      if (!userDocument.exists) {
+        throw Exception('Профиль пользователя не найден');
+      }
+
+      final Map<String, dynamic>? userData = userDocument.data();
+
+      groupId = userData?['groupId']?.toString().trim();
+
+      debugPrint('Контакты: UID = ${user.uid}');
+      debugPrint('Контакты: groupId = $groupId');
+    } catch (error) {
+      debugPrint('Контакты: ошибка загрузки users/${user.uid}: $error');
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _classmates = [];
+        _teachers = [];
+        _classmatesHasError = true;
+        _teachersHasError = true;
+        _isLoading = false;
+      });
+
+      return;
+    }
+
+    if (groupId == null || groupId.isEmpty) {
+      debugPrint('Контакты: учебная группа пользователю не назначена');
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _classmates = [];
+        _teachers = [];
+        _groupIsNotAssigned = true;
+        _isLoading = false;
+      });
+
+      return;
+    }
+
+    List<PublicProfile> classmates = [];
+    List<Teacher> teachers = [];
+
+    bool classmatesHasError = false;
+    bool teachersHasError = false;
+
+    try {
+      debugPrint('Контакты: запрос publicProfiles для группы $groupId...');
+
+      classmates = await _publicProfileService.getClassmates(
+        groupId: groupId,
+        currentUserId: user.uid,
+      );
+
+      debugPrint(
+        'Контакты: publicProfiles успешно, найдено одногруппников: '
+        '${classmates.length}',
+      );
+    } catch (error) {
+      classmatesHasError = true;
+
+      debugPrint('Контакты: ОШИБКА publicProfiles: $error');
+    }
+
+    try {
+      debugPrint('Контакты: запрос teachers для группы $groupId...');
+
+      teachers = await _teacherService.getTeachersForGroup(groupId);
+
+      debugPrint(
+        'Контакты: teachers успешно, найдено преподавателей: '
+        '${teachers.length}',
+      );
+    } catch (error) {
+      teachersHasError = true;
+
+      debugPrint('Контакты: ОШИБКА teachers: $error');
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _classmates = classmates;
+      _teachers = teachers;
+      _classmatesHasError = classmatesHasError;
+      _teachersHasError = teachersHasError;
+      _isLoading = false;
+    });
   }
 
-  void _openClassmateProfile(
-    PublicProfile profile,
-  ) {
+  void _openClassmateProfile(PublicProfile profile) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) =>
-            ContactProfileScreen(
-          profile: profile,
-        ),
+        builder: (context) => ContactProfileScreen(profile: profile),
       ),
     );
   }
 
-  void _openTeacherProfile(
-    Teacher teacher,
-  ) {
+  void _openTeacherProfile(Teacher teacher) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) =>
-            TeacherProfileScreen(
-          teacher: teacher,
-        ),
+        builder: (context) => TeacherProfileScreen(teacher: teacher),
       ),
     );
   }
@@ -164,8 +203,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
         color: AppTheme.primaryBlue,
         backgroundColor: AppTheme.card,
         child: ListView(
-          physics:
-              const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             AppTheme.screenPadding,
             24,
@@ -173,28 +211,18 @@ class _ContactsScreenState extends State<ContactsScreen> {
             32,
           ),
           children: [
-            const Text(
-              'Контакты',
-              style: AppTheme.pageTitle,
-            ),
-
+            const Text('Контакты', style: AppTheme.pageTitle),
             const SizedBox(height: 24),
-
             _ContactsSwitcher(
               selectedIndex: _selectedList,
               onSelected: _selectList,
             ),
-
             const SizedBox(height: 22),
-
             AnimatedSwitcher(
-              duration:
-                  const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 200),
               switchInCurve: Curves.easeOut,
               switchOutCurve: Curves.easeIn,
-              child: _selectedList == 0
-                  ? _buildClassmates()
-                  : _buildTeachers(),
+              child: _selectedList == 0 ? _buildClassmates() : _buildTeachers(),
             ),
           ],
         ),
@@ -204,110 +232,88 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   Widget _buildClassmates() {
     if (_isLoading) {
-      return const _LoadingCard(
-        key: ValueKey(
-          'classmates-loading',
-        ),
+      return const _LoadingCard(key: ValueKey('classmates-loading'));
+    }
+
+    if (_groupIsNotAssigned) {
+      return const _MessageCard(
+        key: ValueKey('classmates-no-group'),
+        icon: Icons.hourglass_empty_rounded,
+        text: 'Учебная группа ещё не назначена. После проверки администратор назначит вашу группу.',
       );
     }
 
-    if (_hasError) {
+    if (_classmatesHasError) {
       return const _MessageCard(
-        key: ValueKey(
-          'classmates-error',
-        ),
+        key: ValueKey('classmates-error'),
         icon: Icons.error_outline,
-        text:
-            'Не удалось загрузить одногруппников',
+        text: 'Не удалось загрузить одногруппников',
       );
     }
 
     if (_classmates.isEmpty) {
       return const _MessageCard(
-        key: ValueKey(
-          'classmates-empty',
-        ),
+        key: ValueKey('classmates-empty'),
         icon: Icons.group_outlined,
-        text:
-            'Одногруппники пока не найдены',
+        text: 'Одногруппники пока не найдены',
       );
     }
 
     return Column(
-      key: const ValueKey(
-        'classmates',
-      ),
-      children: _classmates.map(
-        (profile) {
-          return Padding(
-            padding: const EdgeInsets.only(
-              bottom: 10,
-            ),
-            child: _ContactListItem(
-              name: profile.name,
-              icon: Icons.person_outline,
-              onTap: () =>
-                  _openClassmateProfile(
-                profile,
-              ),
-            ),
-          );
-        },
-      ).toList(),
+      key: const ValueKey('classmates'),
+      children: _classmates.map((profile) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _ContactListItem(
+            name: profile.name,
+            icon: Icons.person_outline,
+            onTap: () => _openClassmateProfile(profile),
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildTeachers() {
     if (_isLoading) {
-      return const _LoadingCard(
-        key: ValueKey(
-          'teachers-loading',
-        ),
+      return const _LoadingCard(key: ValueKey('teachers-loading'));
+    }
+
+    if (_groupIsNotAssigned) {
+      return const _MessageCard(
+        key: ValueKey('teachers-no-group'),
+        icon: Icons.hourglass_empty_rounded,
+        text: 'Учебная группа ещё не назначена. После проверки администратор назначит вашу группу.',
       );
     }
 
-    if (_hasError) {
+    if (_teachersHasError) {
       return const _MessageCard(
-        key: ValueKey(
-          'teachers-error',
-        ),
+        key: ValueKey('teachers-error'),
         icon: Icons.error_outline,
-        text:
-            'Не удалось загрузить преподавателей',
+        text: 'Не удалось загрузить преподавателей',
       );
     }
 
     if (_teachers.isEmpty) {
       return const _MessageCard(
-        key: ValueKey(
-          'teachers-empty',
-        ),
+        key: ValueKey('teachers-empty'),
         icon: Icons.school_outlined,
-        text:
-            'Преподаватели для вашей группы пока не найдены',
+        text: 'Преподаватели для вашей группы пока не найдены',
       );
     }
 
     return Column(
-      key: const ValueKey(
-        'teachers',
-      ),
-      children: _teachers.map(
-        (teacher) {
-          return Padding(
-            padding: const EdgeInsets.only(
-              bottom: 10,
-            ),
-            child: _TeacherListItem(
-              teacher: teacher,
-              onTap: () =>
-                  _openTeacherProfile(
-                teacher,
-              ),
-            ),
-          );
-        },
-      ).toList(),
+      key: const ValueKey('teachers'),
+      children: _teachers.map((teacher) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _TeacherListItem(
+            teacher: teacher,
+            onTap: () => _openTeacherProfile(teacher),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -328,9 +334,7 @@ class _ContactsSwitcher extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -338,23 +342,17 @@ class _ContactsSwitcher extends StatelessWidget {
             child: _SwitcherButton(
               title: 'Одногруппники',
               icon: Icons.group_outlined,
-              isSelected:
-                  selectedIndex == 0,
-              onTap: () =>
-                  onSelected(0),
+              isSelected: selectedIndex == 0,
+              onTap: () => onSelected(0),
             ),
           ),
-
           const SizedBox(width: 4),
-
           Expanded(
             child: _SwitcherButton(
               title: 'Преподаватели',
               icon: Icons.school_outlined,
-              isSelected:
-                  selectedIndex == 1,
-              onTap: () =>
-                  onSelected(1),
+              isSelected: selectedIndex == 1,
+              onTap: () => onSelected(1),
             ),
           ),
         ],
@@ -379,44 +377,29 @@ class _SwitcherButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isSelected
-          ? AppTheme.primaryBlue
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(
-        AppTheme.smallRadius,
-      ),
+      color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppTheme.smallRadius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(
-          AppTheme.smallRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
         child: Center(
           child: Row(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
                 size: 18,
-                color: isSelected
-                    ? Colors.white
-                    : AppTheme.secondaryText,
+                color: isSelected ? Colors.white : AppTheme.secondaryText,
               ),
-
               const SizedBox(width: 7),
-
               Flexible(
                 child: Text(
                   title,
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        FontWeight.w600,
-                    color: isSelected
-                        ? Colors.white
-                        : AppTheme.secondaryText,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : AppTheme.secondaryText,
                   ),
                 ),
               ),
@@ -443,14 +426,10 @@ class _ContactListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppTheme.card,
-      borderRadius: BorderRadius.circular(
-        AppTheme.cardRadius,
-      ),
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -459,39 +438,17 @@ class _ContactListItem extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue
-                      .withValues(
-                    alpha: 0.15,
-                  ),
-                  borderRadius:
-                      BorderRadius.circular(
-                    AppTheme.smallRadius,
-                  ),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.smallRadius),
                 ),
-                child: Icon(
-                  icon,
-                  size: 22,
-                  color:
-                      AppTheme.primaryBlue,
-                ),
+                child: Icon(icon, size: 22, color: AppTheme.primaryBlue),
               ),
-
               const SizedBox(width: 14),
-
-              Expanded(
-                child: Text(
-                  name,
-                  style:
-                      AppTheme.cardTitle,
-                ),
-              ),
-
+              Expanded(child: Text(name, style: AppTheme.cardTitle)),
               const SizedBox(width: 8),
-
               const Icon(
                 Icons.chevron_right_rounded,
-                color:
-                    AppTheme.secondaryText,
+                color: AppTheme.secondaryText,
               ),
             ],
           ),
@@ -505,68 +462,43 @@ class _TeacherListItem extends StatelessWidget {
   final Teacher teacher;
   final VoidCallback onTap;
 
-  const _TeacherListItem({
-    required this.teacher,
-    required this.onTap,
-  });
+  const _TeacherListItem({required this.teacher, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppTheme.card,
-      borderRadius: BorderRadius.circular(
-        AppTheme.cardRadius,
-      ),
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              _TeacherAvatar(
-                teacher: teacher,
-              ),
-
+              _TeacherAvatar(teacher: teacher),
               const SizedBox(width: 14),
-
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      teacher.name,
-                      style:
-                          AppTheme.cardTitle,
-                    ),
-
-                    if (teacher.department
-                        .trim()
-                        .isNotEmpty) ...[
+                    Text(teacher.name, style: AppTheme.cardTitle),
+                    if (teacher.department.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
-
                       Text(
                         teacher.department,
                         maxLines: 1,
-                        overflow:
-                            TextOverflow.ellipsis,
-                        style: AppTheme
-                            .secondaryBodyText,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.secondaryBodyText,
                       ),
                     ],
                   ],
                 ),
               ),
-
               const SizedBox(width: 8),
-
               const Icon(
                 Icons.chevron_right_rounded,
-                color:
-                    AppTheme.secondaryText,
+                color: AppTheme.secondaryText,
               ),
             ],
           ),
@@ -579,31 +511,21 @@ class _TeacherListItem extends StatelessWidget {
 class _TeacherAvatar extends StatelessWidget {
   final Teacher teacher;
 
-  const _TeacherAvatar({
-    required this.teacher,
-  });
+  const _TeacherAvatar({required this.teacher});
 
   @override
   Widget build(BuildContext context) {
-    final String? photoUrl =
-        teacher.photoUrl;
+    final String? photoUrl = teacher.photoUrl;
 
-    if (photoUrl != null &&
-        photoUrl.trim().isNotEmpty) {
+    if (photoUrl != null && photoUrl.trim().isNotEmpty) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(
-          AppTheme.smallRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
         child: Image.network(
           photoUrl,
           width: 44,
           height: 44,
           fit: BoxFit.cover,
-          errorBuilder: (
-            context,
-            error,
-            stackTrace,
-          ) {
+          errorBuilder: (context, error, stackTrace) {
             return _buildPlaceholder();
           },
         ),
@@ -618,12 +540,8 @@ class _TeacherAvatar extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: AppTheme.primaryBlue.withValues(
-          alpha: 0.15,
-        ),
-        borderRadius: BorderRadius.circular(
-          AppTheme.smallRadius,
-        ),
+        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppTheme.smallRadius),
       ),
       child: const Icon(
         Icons.school_outlined,
@@ -635,26 +553,18 @@ class _TeacherAvatar extends StatelessWidget {
 }
 
 class _LoadingCard extends StatelessWidget {
-  const _LoadingCard({
-    super.key,
-  });
+  const _LoadingCard({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 34,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 34),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
+      child: const Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -663,11 +573,7 @@ class _MessageCard extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _MessageCard({
-    super.key,
-    required this.icon,
-    required this.text,
-  });
+  const _MessageCard({super.key, required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -676,9 +582,7 @@ class _MessageCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(
-          AppTheme.cardRadius,
-        ),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Row(
         children: [
@@ -686,32 +590,13 @@ class _MessageCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppTheme.primaryBlue
-                  .withValues(
-                alpha: 0.12,
-              ),
-              borderRadius:
-                  BorderRadius.circular(
-                AppTheme.smallRadius,
-              ),
+              color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.smallRadius),
             ),
-            child: Icon(
-              icon,
-              size: 22,
-              color:
-                  AppTheme.secondaryText,
-            ),
+            child: Icon(icon, size: 22, color: AppTheme.secondaryText),
           ),
-
           const SizedBox(width: 14),
-
-          Expanded(
-            child: Text(
-              text,
-              style:
-                  AppTheme.secondaryBodyText,
-            ),
-          ),
+          Expanded(child: Text(text, style: AppTheme.secondaryBodyText)),
         ],
       ),
     );

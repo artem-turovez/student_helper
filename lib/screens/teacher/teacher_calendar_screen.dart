@@ -8,6 +8,7 @@ import '../../models/personal_event.dart';
 import '../../services/academic_event_service.dart';
 import '../../services/personal_event_service.dart';
 import '../student/create_personal_event_screen.dart';
+import 'create_academic_event_screen.dart';
 
 class TeacherCalendarScreen extends StatefulWidget {
   const TeacherCalendarScreen({super.key});
@@ -18,7 +19,6 @@ class TeacherCalendarScreen extends StatefulWidget {
 
 class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
   final AcademicEventService _academicEventService = AcademicEventService();
-
   final PersonalEventService _personalEventService = PersonalEventService();
 
   late DateTime _visibleMonth;
@@ -79,7 +79,6 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
     final DateTime now = DateTime.now();
 
     _visibleMonth = DateTime(now.year, now.month, 1);
-
     _selectedDate = DateTime(now.year, now.month, now.day);
 
     _loadTeacher();
@@ -130,7 +129,6 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
 
   Future<void> _loadEvents() async {
     final String? teacherId = _teacherId;
-
     final User? user = FirebaseAuth.instance.currentUser;
 
     if (teacherId == null || user == null) {
@@ -188,6 +186,221 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
     }
   }
 
+  Future<void> _openCreateEventMenu() async {
+    final String? teacherId = _teacherId;
+
+    if (teacherId == null || teacherId.trim().isEmpty) {
+      _showMessage('Преподаватель не привязан к профилю');
+      return;
+    }
+
+    final String? eventType = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (bottomSheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(8, 4, 8, 14),
+                  child: Text('Добавить событие', style: AppTheme.sectionTitle),
+                ),
+                ListTile(
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppTheme.smallRadius),
+                    ),
+                    child: const Icon(
+                      Icons.school_outlined,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                  title: const Text('Учебное событие'),
+                  subtitle: const Text('Для группы и занятия преподавателя'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop('academic');
+                  },
+                ),
+                const SizedBox(height: 6),
+                ListTile(
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.personalEvent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(AppTheme.smallRadius),
+                    ),
+                    child: const Icon(
+                      Icons.event_note_outlined,
+                      color: AppTheme.personalEvent,
+                    ),
+                  ),
+                  title: const Text('Личное событие'),
+                  subtitle: const Text('Будет видно только в вашем календаре'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () {
+                    Navigator.of(bottomSheetContext).pop('personal');
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || eventType == null) {
+      return;
+    }
+
+    if (eventType == 'academic') {
+      await _openCreateAcademicEvent();
+      return;
+    }
+
+    if (eventType == 'personal') {
+      await _openCreatePersonalEvent();
+    }
+  }
+
+  Future<void> _openCreateAcademicEvent() async {
+    final String? teacherId = _teacherId;
+
+    if (teacherId == null || teacherId.trim().isEmpty) {
+      return;
+    }
+
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => CreateAcademicEventScreen(
+          teacherId: teacherId,
+          initialDate: _selectedDate,
+        ),
+      ),
+    );
+
+    if (changed == true) {
+      await _loadEvents();
+    }
+  }
+
+  Future<void> _editAcademicEvent(AcademicEvent event) async {
+    final String? teacherId = _teacherId;
+
+    if (teacherId == null || teacherId.trim().isEmpty) {
+      _showMessage('Преподаватель не привязан к профилю');
+      return;
+    }
+
+    if (event.id?.trim().isEmpty != false) {
+      _showMessage('Не удалось определить учебное событие');
+      return;
+    }
+
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => CreateAcademicEventScreen(
+          teacherId: teacherId,
+          initialDate: event.date,
+          event: event,
+        ),
+      ),
+    );
+
+    if (changed == true) {
+      await _loadEvents();
+    }
+  }
+
+  Future<void> _deleteAcademicEvent(AcademicEvent event) async {
+    final String eventId = event.id?.trim() ?? '';
+
+    if (eventId.isEmpty) {
+      _showMessage('Не удалось определить учебное событие');
+      return;
+    }
+
+    final bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Удалить учебное событие?'),
+          content: Text(
+            'Событие «${event.title}» будет удалено '
+            'без возможности восстановления.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                minimumSize: const Size(0, 44),
+              ),
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) {
+      return;
+    }
+
+    try {
+      await _academicEventService.deleteAcademicEvent(eventId: eventId);
+
+      await _loadEvents();
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Учебное событие удалено');
+    } on FirebaseException catch (error) {
+      debugPrint(
+        'Ошибка Firebase при удалении учебного события: '
+        '${error.code} | ${error.message}',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      if (error.code == 'permission-denied') {
+        _showMessage('Нет разрешения на удаление учебного события');
+      } else if (error.code == 'unavailable') {
+        _showMessage('Нет подключения к серверу. Попробуйте позже');
+      } else {
+        _showMessage('Не удалось удалить учебное событие');
+      }
+    } catch (error) {
+      debugPrint('Ошибка удаления учебного события: $error');
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Не удалось удалить учебное событие');
+    }
+  }
+
   Future<void> _openCreatePersonalEvent() async {
     final bool? changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -235,9 +448,7 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось изменить статус события')),
-      );
+      _showMessage('Не удалось изменить статус события');
     }
   }
 
@@ -292,8 +503,7 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Событие удалено')));
+      _showMessage('Событие удалено');
     } catch (error) {
       debugPrint('Ошибка удаления события: $error');
 
@@ -301,10 +511,17 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось удалить событие')),
-      );
+      _showMessage('Не удалось удалить событие');
     }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _previousMonth() async {
@@ -452,7 +669,7 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
                     child: Text('Календарь', style: AppTheme.pageTitle),
                   ),
                   IconButton.filled(
-                    onPressed: _openCreatePersonalEvent,
+                    onPressed: _openCreateEventMenu,
                     style: IconButton.styleFrom(
                       backgroundColor: AppTheme.primaryBlue,
                       foregroundColor: Colors.white,
@@ -525,6 +742,8 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
                       child: _AcademicEventCard(
                         event: event,
                         icon: _getEventIcon(event.type),
+                        onEdit: () => _editAcademicEvent(event),
+                        onDelete: () => _deleteAcademicEvent(event),
                       ),
                     ),
                   ),
@@ -568,9 +787,7 @@ class _CalendarCard extends StatelessWidget {
   final VoidCallback onNext;
 
   final bool Function(DateTime, DateTime) isSameDay;
-
   final bool Function(DateTime) hasAcademicEvents;
-
   final bool Function(DateTime) hasPersonalEvents;
 
   final ValueChanged<DateTime> onSelectDate;
@@ -607,8 +824,7 @@ class _CalendarCard extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  '$monthName '
-                  '${visibleMonth.year}',
+                  '$monthName ${visibleMonth.year}',
                   textAlign: TextAlign.center,
                   style: AppTheme.sectionTitle,
                 ),
@@ -653,11 +869,8 @@ class _CalendarCard extends StatelessWidget {
               }
 
               final bool selected = isSameDay(day, selectedDate);
-
               final bool today = isSameDay(day, DateTime.now());
-
               final bool academic = hasAcademicEvents(day);
-
               final bool personal = hasPersonalEvents(day);
 
               return Material(
@@ -792,11 +1005,26 @@ class _EventSectionTitle extends StatelessWidget {
 class _AcademicEventCard extends StatelessWidget {
   final AcademicEvent event;
   final IconData icon;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _AcademicEventCard({required this.event, required this.icon});
+  const _AcademicEventCard({
+    required this.event,
+    required this.icon,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final String subject = event.subject.trim().isEmpty
+        ? 'Предмет не указан'
+        : event.subject.trim();
+
+    final String group = event.groupId.trim().isEmpty
+        ? 'Группа не указана'
+        : 'Группа ${event.groupId.trim()}';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -808,7 +1036,9 @@ class _AcademicEventCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _EventIconBox(icon: icon, color: AppTheme.primaryBlue),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -821,17 +1051,89 @@ class _AcademicEventCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(event.title, style: AppTheme.cardTitle),
+
+                const SizedBox(height: 10),
+
+                _AcademicEventInfoRow(
+                  icon: Icons.menu_book_outlined,
+                  text: subject,
+                ),
+
+                const SizedBox(height: 6),
+
+                _AcademicEventInfoRow(icon: Icons.groups_outlined, text: group),
+
                 if (event.description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 10),
                   Text(event.description, style: AppTheme.secondaryBodyText),
                 ],
               ],
             ),
           ),
+
+          PopupMenuButton<String>(
+            tooltip: 'Действия',
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color: AppTheme.secondaryText,
+            ),
+            onSelected: (value) {
+              if (value == 'edit') {
+                onEdit();
+              }
+
+              if (value == 'delete') {
+                onDelete();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined),
+                    SizedBox(width: 10),
+                    Text('Редактировать'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, color: AppTheme.danger),
+                    SizedBox(width: 10),
+                    Text('Удалить', style: TextStyle(color: AppTheme.danger)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _AcademicEventInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _AcademicEventInfoRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 17, color: AppTheme.secondaryText),
+        const SizedBox(width: 7),
+        Expanded(child: Text(text, style: AppTheme.secondaryBodyText)),
+      ],
     );
   }
 }
@@ -899,7 +1201,9 @@ class _PersonalEventCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   event.title,
                   style: AppTheme.cardTitle.copyWith(
@@ -911,6 +1215,7 @@ class _PersonalEventCard extends StatelessWidget {
                         : null,
                   ),
                 ),
+
                 if (event.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -1015,9 +1320,13 @@ class _CalendarMessageCard extends StatelessWidget {
       child: Column(
         children: [
           _EventIconBox(icon: icon, color: iconColor),
+
           const SizedBox(height: 14),
+
           Text(title, textAlign: TextAlign.center, style: AppTheme.cardTitle),
+
           const SizedBox(height: 6),
+
           Text(
             description,
             textAlign: TextAlign.center,

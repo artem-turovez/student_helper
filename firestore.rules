@@ -1,0 +1,306 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================
+    // ОБЩИЕ ФУНКЦИИ
+    // =========================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn()
+             && request.auth.token.email_verified == true;
+    }
+
+    function hasUserProfile() {
+      return isSignedIn()
+             && exists(
+               /databases/$(database)/documents/users/$(request.auth.uid)
+             );
+    }
+
+    function currentUser() {
+      return get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      );
+    }
+
+    function isStudent() {
+      return isVerified()
+             && hasUserProfile()
+             && currentUser().data.role == 'student';
+    }
+
+    function isAssignedStudent() {
+      return isStudent()
+             && currentUser().data.groupId != null
+             && currentUser().data.groupId is string
+             && currentUser().data.groupId.size() > 0;
+    }
+
+    function isTeacher() {
+      return isVerified()
+             && hasUserProfile()
+             && currentUser().data.role == 'teacher'
+             && currentUser().data.teacherId != null
+             && currentUser().data.teacherId is string
+             && currentUser().data.teacherId.size() > 0;
+    }
+
+    function isOwnTeacherProfile(teacherId) {
+      return isTeacher()
+             && currentUser().data.teacherId == teacherId;
+    }
+
+    function teacherProfile() {
+      return get(
+        /databases/$(database)/documents/teachers/$(currentUser().data.teacherId)
+      );
+    }
+
+    function teacherHasGroup(groupId) {
+      return isTeacher()
+             && exists(
+               /databases/$(database)/documents/teachers/$(currentUser().data.teacherId)
+             )
+             && teacherProfile().data.groupIds is list
+             && groupId in teacherProfile().data.groupIds;
+    }
+
+    function canViewCollegeSchedule() {
+      return isAssignedStudent() || isTeacher();
+    }
+
+    function academicEventLesson(data) {
+      return get(
+        /databases/$(database)/documents/lessons/$(data.lessonId)
+      );
+    }
+
+    function academicEventHasValidLesson(data) {
+      return data.lessonId is string
+             && data.lessonId.size() > 0
+             && exists(
+               /databases/$(database)/documents/lessons/$(data.lessonId)
+             )
+             && academicEventLesson(data).data.groupId == data.groupId
+             && academicEventLesson(data).data.teacherIds is list
+             && currentUser().data.teacherId
+                in academicEventLesson(data).data.teacherIds
+             && academicEventLesson(data).data.subject == data.subject;
+    }
+
+    function validAcademicEvent(data) {
+      return data.keys().hasOnly([
+               'groupId',
+               'lessonId',
+               'teacherId',
+               'subject',
+               'type',
+               'title',
+               'description',
+               'date'
+             ])
+             && data.groupId is string
+             && data.groupId.size() > 0
+             && teacherHasGroup(data.groupId)
+             && data.teacherId is string
+             && data.teacherId == currentUser().data.teacherId
+             && data.subject is string
+             && data.subject.size() > 0
+             && data.type is string
+             && data.type.size() > 0
+             && data.title is string
+             && data.title.size() > 0
+             && data.title.size() <= 100
+             && data.description is string
+             && data.description.size() <= 500
+             && data.date is timestamp
+             && academicEventHasValidLesson(data);
+    }
+
+
+    // =========================================================
+    // ПОЛЬЗОВАТЕЛИ
+    // =========================================================
+
+    match /users/{userId} {
+
+      allow create: if isSignedIn()
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasOnly([
+                      'name',
+                      'email',
+                      'role',
+                      'groupId',
+                      'teacherId',
+                      'createdAt'
+                    ])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.email is string
+                    && request.auth.token.email != null
+                    && request.resource.data.email ==
+                       request.auth.token.email
+                    && request.resource.data.role == 'student'
+                    && request.resource.data.groupId == null
+                    && request.resource.data.teacherId == null;
+
+      allow read: if isSignedIn()
+                  && request.auth.uid == userId;
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+
+    // =========================================================
+    // ПУБЛИЧНЫЕ ПРОФИЛИ УЧАЩИХСЯ
+    // =========================================================
+
+    match /publicProfiles/{profileId} {
+
+      allow read: if (
+                    isAssignedStudent()
+                    && resource.data.groupId ==
+                       currentUser().data.groupId
+                  )
+                  ||
+                  (
+                    isTeacher()
+                    && resource.data.groupId is string
+                    && teacherHasGroup(resource.data.groupId)
+                  );
+
+      allow create: if false;
+
+      allow update: if isAssignedStudent()
+                    && request.auth.uid == profileId
+                    && resource.data.groupId ==
+                       currentUser().data.groupId
+                    && request.resource.data
+                        .diff(resource.data)
+                        .affectedKeys()
+                        .hasOnly([
+                          'phone',
+                          'telegram',
+                          'showEmail',
+                          'showPhone',
+                          'showTelegram'
+                        ])
+                    && request.resource.data.showEmail is bool
+                    && request.resource.data.showPhone is bool
+                    && request.resource.data.showTelegram is bool;
+
+      allow delete: if false;
+    }
+
+
+    // =========================================================
+    // ПРЕПОДАВАТЕЛИ
+    // =========================================================
+
+    match /teachers/{teacherId} {
+
+      allow read: if isAssignedStudent()
+                  || isTeacher();
+
+      allow create: if false;
+
+      allow update: if isOwnTeacherProfile(teacherId)
+                    && request.resource.data
+                        .diff(resource.data)
+                        .affectedKeys()
+                        .hasOnly([
+                          'email',
+                          'phone',
+                          'telegram',
+                          'department',
+                          'photoUrl',
+                          'showEmail',
+                          'showPhone',
+                          'showTelegram'
+                        ]);
+
+      allow delete: if false;
+    }
+
+
+    // =========================================================
+    // РАСПИСАНИЕ
+    // =========================================================
+
+    match /lessons/{lessonId} {
+
+      allow read: if canViewCollegeSchedule();
+
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+
+    // =========================================================
+    // УЧЕБНЫЕ СОБЫТИЯ
+    // =========================================================
+
+    match /academicEvents/{eventId} {
+
+      allow read: if (
+                    isAssignedStudent()
+                    && resource.data.groupId ==
+                       currentUser().data.groupId
+                  )
+                  ||
+                  (
+                    isTeacher()
+                    && currentUser().data.teacherId ==
+                       resource.data.teacherId
+                  );
+
+      allow create: if isTeacher()
+                    && validAcademicEvent(request.resource.data);
+
+      allow update: if isTeacher()
+                    && resource.data.teacherId ==
+                       currentUser().data.teacherId
+                    && request.resource.data.teacherId ==
+                       resource.data.teacherId
+                    && validAcademicEvent(request.resource.data);
+
+      allow delete: if isTeacher()
+                    && resource.data.teacherId ==
+                       currentUser().data.teacherId;
+    }
+
+
+    // =========================================================
+    // ЛИЧНЫЕ СОБЫТИЯ
+    // =========================================================
+
+    match /personalEvents/{eventId} {
+
+      allow read: if isVerified()
+                  && resource.data.userId ==
+                     request.auth.uid;
+
+      allow create: if isVerified()
+                    && request.resource.data.userId ==
+                       request.auth.uid;
+
+      allow update: if isVerified()
+                    && resource.data.userId ==
+                       request.auth.uid
+                    && request.resource.data.userId ==
+                       request.auth.uid;
+
+      allow delete: if isVerified()
+                    && resource.data.userId ==
+                       request.auth.uid;
+    }
+  }
+}

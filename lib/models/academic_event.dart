@@ -7,6 +7,7 @@ class AcademicEvent {
   final String? lessonId;
   final String? teacherId;
 
+  final String subject;
   final String type;
   final String title;
   final String description;
@@ -18,6 +19,7 @@ class AcademicEvent {
     required this.groupId,
     this.lessonId,
     this.teacherId,
+    this.subject = '',
     required this.type,
     required this.title,
     required this.description,
@@ -35,13 +37,10 @@ class AcademicEvent {
       );
     }
 
-    final Timestamp? timestamp =
-        data['date'] as Timestamp?;
+    final Timestamp? timestamp = data['date'] as Timestamp?;
 
     if (timestamp == null) {
-      throw Exception(
-        'У учебного события ${document.id} не указана дата',
-      );
+      throw Exception('У учебного события ${document.id} не указана дата');
     }
 
     return AcademicEvent(
@@ -49,6 +48,7 @@ class AcademicEvent {
       groupId: data['groupId']?.toString() ?? '',
       lessonId: data['lessonId']?.toString(),
       teacherId: data['teacherId']?.toString(),
+      subject: data['subject']?.toString() ?? '',
       type: data['type']?.toString() ?? '',
       title: data['title']?.toString() ?? '',
       description: data['description']?.toString() ?? '',
@@ -61,6 +61,7 @@ class AcademicEvent {
       'groupId': groupId,
       'lessonId': lessonId,
       'teacherId': teacherId,
+      'subject': subject,
       'type': type,
       'title': title,
       'description': description,

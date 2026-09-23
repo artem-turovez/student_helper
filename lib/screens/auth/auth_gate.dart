@@ -18,6 +18,15 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  late Future<Widget> _startScreenFuture;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _startScreenFuture = determineStartScreen();
+  }
+
   Future<Widget> determineStartScreen() async {
     final User? user = FirebaseAuth.instance.currentUser;
 
@@ -60,8 +69,8 @@ class _AuthGateState extends State<AuthGate> {
 
       if (!userDocument.exists) {
         debugPrint(
-          'Профиль пользователя в Firestore '
-          'не найден',
+          'Профиль пользователя в '
+          'Firestore не найден',
         );
 
         await FirebaseAuth.instance.signOut();
@@ -99,46 +108,66 @@ class _AuthGateState extends State<AuthGate> {
           return const TeacherHomeScreen();
 
         default:
-          debugPrint('Неизвестная роль пользователя: $role');
+          debugPrint(
+            'Неизвестная роль '
+            'пользователя: $role',
+          );
 
           await FirebaseAuth.instance.signOut();
 
           return const StartScreen();
       }
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (error) {
       debugPrint(
         'Firebase Auth ошибка '
         'автоматического входа: '
-        '${e.code} - ${e.message}',
+        '${error.code} - ${error.message}',
       );
 
-      return const StartScreen();
-    } on FirebaseException catch (e) {
+      if (error.code == 'network-request-failed') {
+        return _AuthConnectionErrorScreen(onRetry: _retry);
+      }
+
+      return _AuthConnectionErrorScreen(onRetry: _retry);
+    } on FirebaseException catch (error) {
       debugPrint(
         'Firestore ошибка '
         'автоматического входа: '
-        '${e.code} - ${e.message}',
+        '${error.code} - ${error.message}',
       );
 
-      return const StartScreen();
-    } catch (e) {
-      debugPrint('Ошибка автоматического входа: $e');
+      return _AuthConnectionErrorScreen(onRetry: _retry);
+    } catch (error) {
+      debugPrint(
+        'Ошибка автоматического входа: '
+        '$error',
+      );
 
-      return const StartScreen();
+      return _AuthConnectionErrorScreen(onRetry: _retry);
     }
+  }
+
+  void _retry() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _startScreenFuture = determineStartScreen();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Widget>(
-      future: determineStartScreen(),
+      future: _startScreenFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _AuthLoadingScreen();
         }
 
         if (snapshot.hasError) {
-          return const StartScreen();
+          return _AuthConnectionErrorScreen(onRetry: _retry);
         }
 
         return snapshot.data ?? const StartScreen();
@@ -195,6 +224,78 @@ class _AuthLoadingScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 const Text('Загрузка...', style: AppTheme.secondaryBodyText),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthConnectionErrorScreen extends StatelessWidget {
+  const _AuthConnectionErrorScreen({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.screenPadding,
+              vertical: 32,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  AppBrand.logoPath,
+                  width: 110,
+                  height: 80,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 28),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.wifi_off_rounded,
+                    size: 34,
+                    color: AppTheme.primaryBlue,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Нет соединения',
+                  textAlign: TextAlign.center,
+                  style: AppTheme.pageTitle,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Не удалось проверить '
+                  'данные аккаунта. '
+                  'Проверьте подключение '
+                  'к интернету и попробуйте '
+                  'ещё раз.',
+                  textAlign: TextAlign.center,
+                  style: AppTheme.secondaryBodyText,
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Повторить'),
+                  ),
+                ),
               ],
             ),
           ),

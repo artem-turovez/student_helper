@@ -77,4 +77,133 @@ class AcademicEventService {
 
     return events;
   }
+
+  Future<String> createAcademicEvent({
+    required String groupId,
+    required String lessonId,
+    required String teacherId,
+    required String subject,
+    required String type,
+    required String title,
+    required String description,
+    required DateTime date,
+  }) async {
+    final AcademicEvent event = _buildEvent(
+      groupId: groupId,
+      lessonId: lessonId,
+      teacherId: teacherId,
+      subject: subject,
+      type: type,
+      title: title,
+      description: description,
+      date: date,
+    );
+
+    final DocumentReference<Map<String, dynamic>> document = await _firestore
+        .collection('academicEvents')
+        .add(event.toFirestore());
+
+    return document.id;
+  }
+
+  Future<void> updateAcademicEvent({
+    required String eventId,
+    required String groupId,
+    required String lessonId,
+    required String teacherId,
+    required String subject,
+    required String type,
+    required String title,
+    required String description,
+    required DateTime date,
+  }) async {
+    final String normalizedEventId = eventId.trim();
+
+    if (normalizedEventId.isEmpty) {
+      throw ArgumentError('Не указано учебное событие');
+    }
+
+    final AcademicEvent event = _buildEvent(
+      groupId: groupId,
+      lessonId: lessonId,
+      teacherId: teacherId,
+      subject: subject,
+      type: type,
+      title: title,
+      description: description,
+      date: date,
+    );
+
+    await _firestore
+        .collection('academicEvents')
+        .doc(normalizedEventId)
+        .update(event.toFirestore());
+  }
+
+  Future<void> deleteAcademicEvent({required String eventId}) async {
+    final String normalizedEventId = eventId.trim();
+
+    if (normalizedEventId.isEmpty) {
+      throw ArgumentError('Не указано учебное событие');
+    }
+
+    await _firestore
+        .collection('academicEvents')
+        .doc(normalizedEventId)
+        .delete();
+  }
+
+  AcademicEvent _buildEvent({
+    required String groupId,
+    required String lessonId,
+    required String teacherId,
+    required String subject,
+    required String type,
+    required String title,
+    required String description,
+    required DateTime date,
+  }) {
+    final String normalizedGroupId = groupId.trim();
+    final String normalizedLessonId = lessonId.trim();
+    final String normalizedTeacherId = teacherId.trim();
+    final String normalizedSubject = subject.trim();
+    final String normalizedType = type.trim();
+    final String normalizedTitle = title.trim();
+    final String normalizedDescription = description.trim();
+
+    if (normalizedGroupId.isEmpty) {
+      throw ArgumentError('Не указана учебная группа');
+    }
+
+    if (normalizedLessonId.isEmpty) {
+      throw ArgumentError('Не указано занятие');
+    }
+
+    if (normalizedTeacherId.isEmpty) {
+      throw ArgumentError('Не указан преподаватель');
+    }
+
+    if (normalizedSubject.isEmpty) {
+      throw ArgumentError('Не указан предмет');
+    }
+
+    if (normalizedType.isEmpty) {
+      throw ArgumentError('Не указан тип учебного события');
+    }
+
+    if (normalizedTitle.isEmpty) {
+      throw ArgumentError('Не указано название учебного события');
+    }
+
+    return AcademicEvent(
+      groupId: normalizedGroupId,
+      lessonId: normalizedLessonId,
+      teacherId: normalizedTeacherId,
+      subject: normalizedSubject,
+      type: normalizedType,
+      title: normalizedTitle,
+      description: normalizedDescription,
+      date: DateTime(date.year, date.month, date.day),
+    );
+  }
 }

@@ -5,13 +5,38 @@ import '../models/public_profile.dart';
 class PublicProfileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  Future<PublicProfile?> getProfileById(String userId) async {
+    final String normalizedUserId = userId.trim();
+
+    if (normalizedUserId.isEmpty) {
+      return null;
+    }
+
+    final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+        .collection('publicProfiles')
+        .doc(normalizedUserId)
+        .get();
+
+    if (!document.exists || document.data() == null) {
+      return null;
+    }
+
+    return PublicProfile.fromFirestore(document);
+  }
+
   Future<List<PublicProfile>> getClassmates({
     required String groupId,
     required String currentUserId,
   }) async {
+    final String normalizedGroupId = groupId.trim();
+
+    if (normalizedGroupId.isEmpty) {
+      return [];
+    }
+
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
         .collection('publicProfiles')
-        .where('groupId', isEqualTo: groupId)
+        .where('groupId', isEqualTo: normalizedGroupId)
         .get();
 
     final List<PublicProfile> profiles = snapshot.docs
@@ -29,27 +54,28 @@ class PublicProfileService {
   Future<List<PublicProfile>> getStudentsForGroups({
     required List<String> groupIds,
   }) async {
-    final Set<String> normalizedGroupIds = groupIds
+    final List<String> normalizedGroupIds = groupIds
         .map((groupId) => groupId.trim())
         .where((groupId) => groupId.isNotEmpty)
-        .toSet();
+        .toSet()
+        .toList();
 
     if (normalizedGroupIds.isEmpty) {
       return [];
     }
 
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-        .collection('publicProfiles')
-        .get();
+    final List<PublicProfile> profiles = [];
 
-    final List<PublicProfile> profiles = snapshot.docs
-        .map((document) => PublicProfile.fromFirestore(document))
-        .where(
-          (profile) =>
-              profile.groupId != null &&
-              normalizedGroupIds.contains(profile.groupId!.trim()),
-        )
-        .toList();
+    for (final String groupId in normalizedGroupIds) {
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('publicProfiles')
+          .where('groupId', isEqualTo: groupId)
+          .get();
+
+      profiles.addAll(
+        snapshot.docs.map((document) => PublicProfile.fromFirestore(document)),
+      );
+    }
 
     profiles.sort((a, b) {
       final String firstGroup = a.groupId?.toLowerCase() ?? '';
@@ -66,5 +92,28 @@ class PublicProfileService {
     });
 
     return profiles;
+  }
+
+  Future<void> updateOwnProfile({
+    required String userId,
+    required String phone,
+    required String telegram,
+    required bool showEmail,
+    required bool showPhone,
+    required bool showTelegram,
+  }) async {
+    final String normalizedUserId = userId.trim();
+
+    if (normalizedUserId.isEmpty) {
+      throw ArgumentError('Не указан идентификатор пользователя.');
+    }
+
+    await _firestore.collection('publicProfiles').doc(normalizedUserId).update({
+      'phone': phone.trim().isEmpty ? null : phone.trim(),
+      'telegram': telegram.trim().isEmpty ? null : telegram.trim(),
+      'showEmail': showEmail,
+      'showPhone': showPhone,
+      'showTelegram': showTelegram,
+    });
   }
 }

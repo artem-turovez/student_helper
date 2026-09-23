@@ -80,6 +80,20 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
         throw Exception('Пользователь не авторизован');
       }
 
+      try {
+        await user.reload();
+
+        final User? refreshedUser = FirebaseAuth.instance.currentUser;
+
+        if (refreshedUser == null) {
+          throw Exception('Пользователь не авторизован');
+        }
+
+        await refreshedUser.getIdToken(true);
+      } catch (error) {
+        debugPrint('Ошибка обновления Firebase Auth: $error');
+      }
+
       final DocumentSnapshot<Map<String, dynamic>> userDocument =
           await FirebaseFirestore.instance
               .collection('users')
@@ -122,11 +136,13 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
             loadedTeacherName = firestoreTeacherName;
           }
         }
-      } catch (error) {
+      } on FirebaseException catch (error) {
         debugPrint(
-          'Не удалось загрузить карточку '
-          'преподавателя: $error',
+          'Ошибка загрузки профиля преподавателя: '
+          '${error.code} | ${error.message}',
         );
+      } catch (error) {
+        debugPrint('Ошибка загрузки профиля преподавателя: $error');
       }
 
       if (!mounted) {
@@ -140,11 +156,22 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
       });
 
       await loadLessons();
-    } catch (error) {
+    } on FirebaseException catch (error) {
       debugPrint(
-        'Ошибка загрузки преподавателя: '
-        '$error',
+        'Ошибка Firestore при загрузке преподавателя: '
+        '${error.code} | ${error.message}',
       );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        isLoadingTeacher = false;
+        loadingError = 'Не удалось определить преподавателя.';
+      });
+    } catch (error) {
+      debugPrint('Ошибка загрузки преподавателя: $error');
 
       if (!mounted) {
         return;
@@ -164,10 +191,12 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
       return;
     }
 
-    setState(() {
-      isLoadingLessons = true;
-      loadingError = null;
-    });
+    if (mounted) {
+      setState(() {
+        isLoadingLessons = true;
+        loadingError = null;
+      });
+    }
 
     try {
       final List<Lesson> loadedLessons = await scheduleService
@@ -184,10 +213,10 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
         lessons = loadedLessons;
         isLoadingLessons = false;
       });
-    } catch (error) {
+    } on FirebaseException catch (error) {
       debugPrint(
-        'Ошибка загрузки расписания '
-        'преподавателя: $error',
+        'Ошибка Firestore при загрузке расписания преподавателя: '
+        '${error.code} | ${error.message}',
       );
 
       if (!mounted) {
@@ -199,8 +228,21 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
         isLoadingLessons = false;
         loadingError =
             'Не удалось получить расписание. '
-            'Проверьте подключение и '
-            'повторите попытку.';
+            'Проверьте подключение и повторите попытку.';
+      });
+    } catch (error) {
+      debugPrint('Ошибка загрузки расписания преподавателя: $error');
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        lessons = [];
+        isLoadingLessons = false;
+        loadingError =
+            'Не удалось получить расписание. '
+            'Проверьте подключение и повторите попытку.';
       });
     }
   }
@@ -268,7 +310,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
 
   String getWeekTitle() {
     final DateTime monday = selectedMonday;
-
     final DateTime saturday = monday.add(const Duration(days: 5));
 
     if (monday.month == saturday.month) {
@@ -375,7 +416,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
               },
               itemBuilder: (context, index) {
                 final bool isSelected = selectedDayIndex == index;
-
                 final DateTime date = getDateForIndex(index);
 
                 return _DayButton(
@@ -504,10 +544,7 @@ class _TeacherLessonCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 _LessonInfo(
                   icon: Icons.groups_outlined,
-                  text: subgroup.isEmpty
-                      ? group
-                      : '$group · '
-                            '$subgroup',
+                  text: subgroup.isEmpty ? group : '$group · $subgroup',
                 ),
                 const SizedBox(height: 7),
                 _LessonInfo(
@@ -765,8 +802,7 @@ class _EmptyTeacherSchedule extends StatelessWidget {
               const Text('Занятий нет', style: AppTheme.sectionTitle),
               const SizedBox(height: 6),
               const Text(
-                'На этот день у вас '
-                'нет занятий.',
+                'На этот день у вас нет занятий.',
                 textAlign: TextAlign.center,
                 style: AppTheme.secondaryBodyText,
               ),
@@ -818,8 +854,7 @@ class _TeacherScheduleError extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Не удалось загрузить '
-              'расписание',
+              'Не удалось загрузить расписание',
               textAlign: TextAlign.center,
               style: AppTheme.sectionTitle,
             ),

@@ -10,6 +10,10 @@ class PublicProfile {
   final String? telegram;
   final String? photoUrl;
 
+  final bool showEmail;
+  final bool showPhone;
+  final bool showTelegram;
+
   const PublicProfile({
     required this.id,
     required this.name,
@@ -18,6 +22,9 @@ class PublicProfile {
     this.phone,
     this.telegram,
     this.photoUrl,
+    this.showEmail = false,
+    this.showPhone = false,
+    this.showTelegram = false,
   });
 
   factory PublicProfile.fromFirestore(
@@ -26,9 +33,7 @@ class PublicProfile {
     final Map<String, dynamic>? data = document.data();
 
     if (data == null) {
-      throw Exception(
-        'Публичный профиль ${document.id} не содержит данных',
-      );
+      throw Exception('Публичный профиль ${document.id} не содержит данных');
     }
 
     return PublicProfile(
@@ -39,6 +44,9 @@ class PublicProfile {
       phone: data['phone']?.toString(),
       telegram: data['telegram']?.toString(),
       photoUrl: data['photoUrl']?.toString(),
+      showEmail: data['showEmail'] == true,
+      showPhone: data['showPhone'] == true,
+      showTelegram: data['showTelegram'] == true,
     );
   }
 }
