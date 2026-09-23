@@ -61,10 +61,7 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         _hasScheduleError = false;
       });
     } catch (error) {
-      debugPrint(
-        'Ошибка загрузки расписания '
-        'преподавателя: $error',
-      );
+      debugPrint('Ошибка загрузки расписания преподавателя: $error');
 
       if (!mounted) {
         return;
@@ -129,9 +126,9 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
   }
 
   bool _hasContacts() {
-    return teacher.email.trim().isNotEmpty ||
-        teacher.phone.trim().isNotEmpty ||
-        teacher.telegram.trim().isNotEmpty;
+    return (teacher.showEmail && teacher.email.trim().isNotEmpty) ||
+        (teacher.showPhone && teacher.phone.trim().isNotEmpty) ||
+        (teacher.showTelegram && teacher.telegram.trim().isNotEmpty);
   }
 
   bool _isSameDay(DateTime first, DateTime second) {
@@ -321,6 +318,13 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool showEmail = teacher.showEmail && teacher.email.trim().isNotEmpty;
+
+    final bool showPhone = teacher.showPhone && teacher.phone.trim().isNotEmpty;
+
+    final bool showTelegram =
+        teacher.showTelegram && teacher.telegram.trim().isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Преподаватель')),
       body: SafeArea(
@@ -345,25 +349,26 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
 
               const SizedBox(height: 14),
 
-              if (teacher.email.trim().isNotEmpty)
+              if (showEmail)
                 _InfoCard(
                   icon: Icons.email_outlined,
                   title: 'Email',
                   value: teacher.email,
                 ),
 
-              if (teacher.email.trim().isNotEmpty) const SizedBox(height: 10),
+              if (showEmail && (showPhone || showTelegram))
+                const SizedBox(height: 10),
 
-              if (teacher.phone.trim().isNotEmpty)
+              if (showPhone)
                 _InfoCard(
                   icon: Icons.phone_outlined,
                   title: 'Телефон',
                   value: teacher.phone,
                 ),
 
-              if (teacher.phone.trim().isNotEmpty) const SizedBox(height: 10),
+              if (showPhone && showTelegram) const SizedBox(height: 10),
 
-              if (teacher.telegram.trim().isNotEmpty)
+              if (showTelegram)
                 _InfoCard(
                   icon: Icons.send_outlined,
                   title: 'Telegram',
@@ -718,8 +723,8 @@ class _EmptyContactsCard extends StatelessWidget {
 
           Expanded(
             child: Text(
-              'Контактная информация '
-              'пока не указана',
+              'Преподаватель не предоставил '
+              'контактную информацию',
               style: AppTheme.secondaryBodyText,
             ),
           ),

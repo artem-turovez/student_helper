@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../../models/teacher.dart';
 import '../../services/teacher_service.dart';
 import '../auth/start_screen.dart';
+import 'teacher_edit_profile_screen.dart';
 
 class TeacherOwnProfileScreen extends StatefulWidget {
   const TeacherOwnProfileScreen({super.key});
@@ -17,7 +18,9 @@ class TeacherOwnProfileScreen extends StatefulWidget {
 
 class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   final TeacherService _teacherService = TeacherService();
 
   late Future<_TeacherProfileData?> _profileFuture;
@@ -75,6 +78,18 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
     });
 
     await future;
+  }
+
+  Future<void> _openEditProfile(Teacher teacher) async {
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => TeacherEditProfileScreen(teacher: teacher),
+      ),
+    );
+
+    if (changed == true && mounted) {
+      await _refreshProfile();
+    }
   }
 
   String _getInitials(String fullName) {
@@ -227,7 +242,21 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                 32,
               ),
               children: [
-                const Text('Профиль', style: AppTheme.pageTitle),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Профиль', style: AppTheme.pageTitle),
+                    ),
+                    if (teacher != null)
+                      IconButton(
+                        onPressed: () {
+                          _openEditProfile(teacher);
+                        },
+                        tooltip: 'Редактировать профиль',
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                  ],
+                ),
 
                 const SizedBox(height: 28),
 
@@ -257,6 +286,20 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                   textAlign: TextAlign.center,
                   style: AppTheme.secondaryBodyText,
                 ),
+
+                if (teacher != null) ...[
+                  const SizedBox(height: 18),
+
+                  Center(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        _openEditProfile(teacher);
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Редактировать профиль'),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 30),
 
@@ -291,6 +334,7 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                   icon: Icons.email_outlined,
                   title: 'Email',
                   value: _displayValue(email),
+                  visibility: teacher?.showEmail,
                 ),
 
                 const SizedBox(height: 10),
@@ -299,6 +343,7 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                   icon: Icons.phone_outlined,
                   title: 'Телефон',
                   value: _displayValue(phone),
+                  visibility: teacher?.showPhone,
                 ),
 
                 const SizedBox(height: 10),
@@ -307,6 +352,7 @@ class _TeacherOwnProfileScreenState extends State<TeacherOwnProfileScreen> {
                   icon: Icons.send_outlined,
                   title: 'Telegram',
                   value: _displayValue(telegram),
+                  visibility: teacher?.showTelegram,
                 ),
 
                 const SizedBox(height: 28),
@@ -435,12 +481,14 @@ class _TeacherProfileInfoCard extends StatelessWidget {
   final String title;
   final String value;
   final Color? iconColor;
+  final bool? visibility;
 
   const _TeacherProfileInfoCard({
     required this.icon,
     required this.title,
     required this.value,
     this.iconColor,
+    this.visibility,
   });
 
   @override
@@ -473,7 +521,19 @@ class _TeacherProfileInfoCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTheme.labelText),
+                Row(
+                  children: [
+                    Expanded(child: Text(title, style: AppTheme.labelText)),
+                    if (visibility != null)
+                      Icon(
+                        visibility!
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        size: 17,
+                        color: AppTheme.secondaryText,
+                      ),
+                  ],
+                ),
 
                 const SizedBox(height: 3),
 

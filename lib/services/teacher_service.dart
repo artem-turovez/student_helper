@@ -71,4 +71,29 @@ class TeacherService {
 
     return Teacher.fromFirestore(document.id, data);
   }
+
+  Future<void> updateOwnProfile({
+    required String teacherId,
+    required String email,
+    required String phone,
+    required String telegram,
+    required String department,
+    required bool showEmail,
+    required bool showPhone,
+    required bool showTelegram,
+  }) async {
+    if (teacherId.trim().isEmpty) {
+      throw ArgumentError('Не указан идентификатор преподавателя.');
+    }
+
+    await _firestore.collection('teachers').doc(teacherId).update({
+      'email': email.trim(),
+      'phone': phone.trim(),
+      'telegram': telegram.trim(),
+      'department': department.trim(),
+      'showEmail': showEmail,
+      'showPhone': showPhone,
+      'showTelegram': showTelegram,
+    });
+  }
 }

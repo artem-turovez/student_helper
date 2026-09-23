@@ -8,6 +8,10 @@ class Teacher {
   final String department;
   final List<String> groupIds;
 
+  final bool showEmail;
+  final bool showPhone;
+  final bool showTelegram;
+
   const Teacher({
     required this.id,
     required this.name,
@@ -17,12 +21,12 @@ class Teacher {
     required this.photoUrl,
     required this.department,
     required this.groupIds,
+    required this.showEmail,
+    required this.showPhone,
+    required this.showTelegram,
   });
 
-  factory Teacher.fromFirestore(
-    String id,
-    Map<String, dynamic> data,
-  ) {
+  factory Teacher.fromFirestore(String id, Map<String, dynamic> data) {
     return Teacher(
       id: id,
       name: data['name'] as String? ?? '',
@@ -30,11 +34,11 @@ class Teacher {
       phone: data['phone'] as String? ?? '',
       telegram: data['telegram'] as String? ?? '',
       photoUrl: data['photoUrl'] as String?,
-      department:
-          data['department'] as String? ?? '',
-      groupIds: List<String>.from(
-        data['groupIds'] ?? const [],
-      ),
+      department: data['department'] as String? ?? '',
+      groupIds: List<String>.from(data['groupIds'] ?? const []),
+      showEmail: data['showEmail'] as bool? ?? true,
+      showPhone: data['showPhone'] as bool? ?? true,
+      showTelegram: data['showTelegram'] as bool? ?? true,
     );
   }
 }
