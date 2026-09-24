@@ -1,13 +1,9 @@
 import re
 
 
-# Явно подтверждённые опечатки
-# в исходных PDF-расписаниях.
-#
-# Здесь нельзя использовать
-# автоматическое "похожее имя",
-# потому что похожие фамилии могут
-# принадлежать разным преподавателям.
+# Только подтверждённые исправления опечаток.
+# Никакого fuzzy-исправления автоматически:
+# похожие фамилии могут принадлежать разным людям.
 TEACHER_NAME_CORRECTIONS = {
     "Бтрим": "Бутрим",
     "Корнлова": "Корнилова",
@@ -17,66 +13,81 @@ TEACHER_NAME_CORRECTIONS = {
 def normalize_spaces(
     value: str,
 ) -> str:
-    """
-    Убирает лишние пробелы
-    и переносы строк.
-    """
-
     return re.sub(
         r"\s+",
         " ",
-        str(value),
+        str(value or ""),
     ).strip()
+
+
+def normalize_dashes(
+    value: str,
+) -> str:
+    """
+    Нормализует только вид дефиса.
+
+    Важно:
+    ведущие и конечные дефисы НЕ удаляются,
+    потому что они могут означать ошибку
+    разбора PDF.
+
+    Примеры:
+
+    "Щербакова – Шаблова"
+        -> "Щербакова-Шаблова"
+
+    "-Шаблова"
+        -> "-Шаблова"
+
+    "Шаблова-"
+        -> "Шаблова-"
+    """
+
+    name = str(value or "")
+
+    name = (
+        name
+        .replace("–", "-")
+        .replace("—", "-")
+    )
+
+    name = re.sub(
+        r"\s*-\s*",
+        "-",
+        name,
+    )
+
+    return name
 
 
 def normalize_teacher_name(
     value: str,
 ) -> str:
     """
-    Приводит имя преподавателя
-    к каноническому варианту.
+    Выполняет только безопасную
+    нормализацию имени преподавателя.
 
-    Например:
-
-    Бтрим
-    ->
-    Бутрим
-
-    Корнлова
-    ->
-    Корнилова
+    Никакие подозрительные ведущие или
+    конечные символы автоматически
+    не удаляются.
     """
 
-    name = normalize_spaces(
-        value
-    )
+    name = normalize_spaces(value)
+    name = normalize_dashes(name)
 
     if not name:
         return ""
 
-    return (
-        TEACHER_NAME_CORRECTIONS
-        .get(
-            name,
-            name,
-        )
+    return TEACHER_NAME_CORRECTIONS.get(
+        name,
+        name,
     )
 
 
 def normalize_teacher_key(
     value: str,
 ) -> str:
-    """
-    Создаёт строку для безопасного
-    сравнения имён.
-
-    Используется только для поиска
-    совпадений, а не для отображения.
-    """
-
-    name = normalize_teacher_name(
-        value
-    )
+    name = normalize_teacher_name(value)
 
     return (
         name
@@ -89,20 +100,7 @@ def normalize_teacher_key(
 def get_teacher_surname(
     value: str,
 ) -> str:
-    """
-    Возвращает фамилию из полного
-    имени преподавателя.
-
-    Например:
-
-    Петрова Анна Сергеевна
-    ->
-    Петрова
-    """
-
-    name = normalize_teacher_name(
-        value
-    )
+    name = normalize_teacher_name(value)
 
     if not name:
         return ""
@@ -113,23 +111,66 @@ def get_teacher_surname(
 def get_teacher_surname_key(
     value: str,
 ) -> str:
-    """
-    Нормализованный ключ фамилии.
-
-    Например:
-
-    Петрова Анна Сергеевна
-    ->
-    петрова
-    """
-
-    surname = get_teacher_surname(
-        value
-    )
+    surname = get_teacher_surname(value)
 
     return (
         surname
         .lower()
         .replace("ё", "е")
         .strip()
+    )
+
+
+def is_valid_teacher_name(
+    value: str,
+) -> bool:
+    """
+    Структурная проверка фамилии.
+
+    Функция не подтверждает существование
+    преподавателя, а только проверяет,
+    что значение похоже на корректную
+    фамилию.
+    """
+
+    name = normalize_teacher_name(value)
+
+    if not name:
+        return False
+
+    # Сейчас парсер расписания должен
+    # возвращать именно фамилию.
+    if " " in name:
+        return False
+
+    if any(
+        char.isdigit()
+        for char in name
+    ):
+        return False
+
+    if (
+        len(name) < 3
+        or len(name) > 40
+    ):
+        return False
+
+    # Обычная фамилия:
+    # Корнилова
+    #
+    # Составная фамилия:
+    # Щербакова-Шаблова
+    #
+    # Но:
+    # -Шаблова
+    # Шаблова-
+    # --Шаблова
+    # уже не пройдут.
+    return (
+        re.fullmatch(
+            r"[А-ЯЁІЎ][а-яёіў]+"
+            r"(?:-[А-ЯЁІЎ][а-яёіў]+)*",
+            name,
+        )
+        is not None
     )

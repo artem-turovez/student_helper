@@ -4,7 +4,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
-
+from teacher_names import (
+    is_valid_teacher_name,
+    normalize_teacher_name,
+)
 
 BAD_TEACHER_TOKENS = {
     "МУ",
@@ -340,6 +343,42 @@ def audit_lesson(
                 ),
             )
             continue
+
+        normalized_teacher = normalize_teacher_name(
+            teacher_name
+        )
+
+        if not is_valid_teacher_name(
+            normalized_teacher
+        ):
+            add_issue(
+                issues,
+                index,
+                lesson,
+                (
+                    "некорректное имя "
+                    "преподавателя: "
+                    f"{teacher_name!r}."
+                ),
+            )
+            continue
+
+        if (
+            teacher_name
+            != normalized_teacher
+        ):
+            add_issue(
+                issues,
+                index,
+                lesson,
+                (
+                    "неканоническое имя "
+                    "преподавателя: "
+                    f"{teacher_name!r}; "
+                    "после нормализации: "
+                    f"{normalized_teacher!r}."
+                ),
+            )
 
         if (
             teacher_name

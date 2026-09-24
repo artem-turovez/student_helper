@@ -10,9 +10,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 from teacher_names import (
-    TEACHER_NAME_CORRECTIONS,
     normalize_teacher_name,
     normalize_teacher_key,
+    is_valid_teacher_name,
 )
 
 
@@ -233,8 +233,21 @@ def collect_teachers(
                     )
                 )
 
-                if not canonical_name:
-                    continue
+
+                if not is_valid_teacher_name(
+                        canonical_name
+                    ):
+                        raise ValueError(
+                            "\nОбнаружено подозрительное имя преподавателя.\n"
+                            f"Файл: {path.name}\n"
+                            f"Дата: {date}\n"
+                            f"Группа: {group_id}\n"
+                            f"Предмет: {subject}\n"
+                            f"Исходное значение: {raw_name!r}\n"
+                            f"После нормализации: {canonical_name!r}\n"
+                            "\nИмпорт остановлен. "
+                            "Сначала необходимо проверить расписание."
+                        )
 
                 teacher_key = (
                     normalize_teacher_key(

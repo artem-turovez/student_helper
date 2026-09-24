@@ -3,10 +3,10 @@ import hashlib
 import json
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-
+from google.cloud.firestore_v1.base_query import FieldFilter
 from firebase_connection import get_firestore_client
 from teacher_names import (
     normalize_teacher_name,
@@ -340,9 +340,14 @@ def parse_firestore_date(
             "У занятия отсутствует дата."
         )
 
-    return datetime.strptime(
-        value,
-        "%Y-%m-%d",
+    return (
+        datetime.strptime(
+            value,
+            "%Y-%m-%d",
+        )
+        .replace(
+            tzinfo=timezone.utc,
+        )
     )
 
 
@@ -655,7 +660,296 @@ def check_document_id_collisions(
     raise ValueError(
         "Обнаружены коллизии ID занятий."
     )
+def normalize_value_for_compare(
+    value: Any,
+) -> Any:
+    """
+    Приводит значения Firestore и нового
+    расписания к одинаковому виду для
+    безопасного сравнения.
+    """
 
+    if isinstance(
+        value,
+        datetime,
+    ):
+        if value.tzinfo is None:
+            value = value.replace(
+                tzinfo=timezone.utc,
+            )
+
+        return (
+            value
+            .astimezone(timezone.utc)
+            .isoformat()
+        )
+
+    if isinstance(
+        value,
+        list,
+    ):
+        return [
+            normalize_value_for_compare(item)
+            for item in value
+        ]
+
+    if isinstance(
+        value,
+        dict,
+    ):
+        return {
+            key: normalize_value_for_compare(
+                item
+            )
+            for key, item in value.items()
+        }
+
+    return value
+
+
+def lessons_equal(
+    existing: dict[str, Any],
+    prepared: dict[str, Any],
+) -> bool:
+    """
+    Сравниваем только поля, которыми
+    управляет импорт расписания.
+    """
+
+    managed_fields = [
+        "date",
+        "groupId",
+        "number",
+        "time",
+        "subject",
+        "teachers",
+        "teacherIds",
+        "rooms",
+        "type",
+        "subgroup",
+    ]
+
+    existing_managed = {
+        field: existing.get(field)
+        for field in managed_fields
+    }
+
+    prepared_managed = {
+        field: prepared.get(field)
+        for field in managed_fields
+    }
+
+    return (
+        normalize_value_for_compare(
+            existing_managed
+        )
+        ==
+        normalize_value_for_compare(
+            prepared_managed
+        )
+    )
+
+
+def load_existing_lessons_for_date(
+    db,
+    schedule_date: str,
+) -> dict[str, dict[str, Any]]:
+    """
+    Загружает из Firestore только занятия
+    импортируемой даты.
+    """
+
+    start = parse_firestore_date(
+        schedule_date
+    )
+
+    end = start + timedelta(
+        days=1
+    )
+
+    query = (
+        db.collection("lessons")
+        .where(
+            filter=FieldFilter(
+                "date",
+                ">=",
+                start,
+            )
+        )
+        .where(
+            filter=FieldFilter(
+                "date",
+                "<",
+                end,
+            )
+        )
+    )
+
+    existing: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    for document in query.stream():
+        existing[document.id] = (
+            document.to_dict()
+            or {}
+        )
+
+    return existing
+
+
+def build_sync_plan(
+    db,
+    schedule_date: str,
+    prepared: list[
+        tuple[
+            str,
+            dict[str, Any],
+        ]
+    ],
+) -> dict[str, Any]:
+    """
+    Сравнивает новое расписание с Firestore.
+
+    Никаких изменений базы эта функция
+    не выполняет.
+    """
+
+    existing = load_existing_lessons_for_date(
+        db,
+        schedule_date,
+    )
+
+    prepared_by_id = {
+        document_id: lesson
+        for document_id, lesson in prepared
+    }
+
+    create_ids: list[str] = []
+    update_ids: list[str] = []
+    unchanged_ids: list[str] = []
+
+    for (
+        document_id,
+        lesson,
+    ) in prepared:
+        old_lesson = existing.get(
+            document_id
+        )
+
+        if old_lesson is None:
+            create_ids.append(
+                document_id
+            )
+            continue
+
+        if lessons_equal(
+            old_lesson,
+            lesson,
+        ):
+            unchanged_ids.append(
+                document_id
+            )
+        else:
+            update_ids.append(
+                document_id
+            )
+
+    delete_ids = sorted(
+        set(existing)
+        - set(prepared_by_id)
+    )
+
+    return {
+        "date": schedule_date,
+        "existing": existing,
+        "prepared": prepared_by_id,
+        "create": sorted(create_ids),
+        "update": sorted(update_ids),
+        "unchanged": sorted(
+            unchanged_ids
+        ),
+        "delete": delete_ids,
+    }
+
+
+def print_sync_plan(
+    plan: dict[str, Any],
+) -> None:
+    print()
+    print("=" * 70)
+    print(
+        "ПЛАН СИНХРОНИЗАЦИИ "
+        f"ЗА {plan['date']}"
+    )
+    print("=" * 70)
+
+    print(
+        "В Firestore сейчас: "
+        f"{len(plan['existing'])}"
+    )
+
+    print(
+        "В новом расписании: "
+        f"{len(plan['prepared'])}"
+    )
+
+    print()
+    print(
+        "Создать: "
+        f"{len(plan['create'])}"
+    )
+
+    print(
+        "Обновить: "
+        f"{len(plan['update'])}"
+    )
+
+    print(
+        "Без изменений: "
+        f"{len(plan['unchanged'])}"
+    )
+
+    print(
+        "Удалить устаревших: "
+        f"{len(plan['delete'])}"
+    )
+
+    if plan["delete"]:
+        print()
+        print(
+            "Устаревшие документы, "
+            "которые будут удалены "
+            "только при --commit:"
+        )
+
+        for document_id in plan[
+            "delete"
+        ]:
+            lesson = plan[
+                "existing"
+            ].get(
+                document_id,
+                {},
+            )
+
+            print(
+                "  - "
+                f"{document_id} | "
+                f"{lesson.get('groupId')} | "
+                f"пара "
+                f"{lesson.get('number')} | "
+                f"{lesson.get('time')} | "
+                f"{lesson.get('subject')}"
+            )
+
+    print()
+    print(
+        "На этапе dry-run "
+        "Firestore НЕ изменяется."
+    )
+    print("=" * 70)
 
 def analyze_import(
     db,
@@ -687,6 +981,92 @@ def analyze_import(
         f"Занятий в JSON: "
         f"{len(lessons)}"
     )
+    if not lessons:
+        raise ValueError(
+            "JSON не содержит занятий. "
+            "Импорт пустого расписания заблокирован, "
+            "чтобы не удалить расписание "
+            "за весь день."
+        )
+    schedule_date = str(
+        data.get(
+            "date",
+            "",
+        )
+        or ""
+    ).strip()
+
+    if not schedule_date:
+        raise ValueError(
+            "В JSON отсутствует корневая дата "
+            "расписания."
+        )
+
+    # Проверяем формат даты заранее.
+    parse_firestore_date(
+        schedule_date
+    )
+
+    wrong_date_lessons = []
+
+    for index, lesson in enumerate(
+        lessons
+    ):
+        if not isinstance(
+            lesson,
+            dict,
+        ):
+            continue
+
+        lesson_date = str(
+            lesson.get(
+                "date",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if lesson_date != schedule_date:
+            wrong_date_lessons.append(
+                (
+                    index + 1,
+                    lesson_date,
+                    lesson.get(
+                        "groupId",
+                        "",
+                    ),
+                )
+            )
+
+    if wrong_date_lessons:
+        print()
+        print("=" * 70)
+        print(
+            "ИМПОРТ ЗАБЛОКИРОВАН: "
+            "НЕСОВПАДЕНИЕ ДАТ"
+        )
+        print("=" * 70)
+
+        print(
+            "Корневая дата расписания: "
+            f"{schedule_date}"
+        )
+
+        for (
+            index,
+            lesson_date,
+            group_id,
+        ) in wrong_date_lessons[:20]:
+            print(
+                f"  Занятие #{index}: "
+                f"date={lesson_date!r}, "
+                f"groupId={group_id!r}"
+            )
+
+        raise ValueError(
+            "В JSON обнаружены занятия "
+            "с другой датой."
+        )
 
     print()
     print(
@@ -746,11 +1126,12 @@ def analyze_import(
 
     matched_names: set[str] = set()
     unresolved_names: set[str] = set()
-
     ambiguous_names: dict[
         str,
         set[str],
     ] = defaultdict(set)
+
+    teacher_problems: list[dict[str, Any]] = []
 
     lessons_with_teachers = 0
     lessons_fully_linked = 0
@@ -796,6 +1177,44 @@ def analyze_import(
                 name
             ].update(
                 candidates
+            )
+        if unresolved or ambiguous:
+            teacher_problems.append(
+                {
+                    "date": str(
+                        lesson.get(
+                            "date",
+                            "",
+                        )
+                    ),
+                    "groupId": str(
+                        lesson.get(
+                            "groupId",
+                            "",
+                        )
+                    ),
+                    "number": lesson.get(
+                        "number"
+                    ),
+                    "time": str(
+                        lesson.get(
+                            "time",
+                            "",
+                        )
+                    ),
+                    "subject": str(
+                        lesson.get(
+                            "subject",
+                            "",
+                        )
+                    ),
+                    "unresolved": list(
+                        unresolved
+                    ),
+                    "ambiguous": dict(
+                        ambiguous
+                    ),
+                }
             )
 
         parsed_teachers = (
@@ -915,6 +1334,47 @@ def analyze_import(
         f"в исходном расписании: "
         f"{lessons_without_teachers}"
     )
+    if teacher_problems:
+        print()
+        print("-" * 70)
+        print("ПРОБЛЕМНЫЕ ЗАНЯТИЯ")
+        print("-" * 70)
+
+        for problem in teacher_problems:
+            print()
+
+            print(
+                f"{problem['date']} | "
+                f"{problem['groupId']} | "
+                f"пара {problem['number']} | "
+                f"{problem['time']} | "
+                f"{problem['subject']}"
+            )
+
+            for name in problem[
+                "unresolved"
+            ]:
+                print(
+                    "  НЕ НАЙДЕН: "
+                    f"{name}"
+                )
+
+            for (
+                name,
+                candidates,
+            ) in problem[
+                "ambiguous"
+            ].items():
+                print(
+                    "  НЕОДНОЗНАЧНО: "
+                    f"{name}"
+                )
+
+                for candidate in candidates:
+                    print(
+                        "    -> "
+                        f"{candidate}"
+                    )
 
     print()
     print("-" * 70)
@@ -959,7 +1419,43 @@ def analyze_import(
             "  subgroup: "
             f"{lesson['subgroup']}"
         )
+    if (
+        unresolved_names
+        or ambiguous_names
+        or lessons_not_linked > 0
+    ):
+        print()
+        print("=" * 70)
+        print(
+            "ИМПОРТ ЗАБЛОКИРОВАН"
+        )
+        print("=" * 70)
 
+        print(
+            "Обнаружены занятия, "
+            "для которых не удалось "
+            "однозначно определить "
+            "преподавателей."
+        )
+
+        print(
+            "Firestore НЕ изменён."
+        )
+
+        print(
+            "Исправьте исходные данные "
+            "или teacher_names.py, "
+            "после чего повторите "
+            "проверку."
+        )
+
+        print("=" * 70)
+
+        raise ValueError(
+            "Импорт заблокирован: "
+            "не все преподаватели "
+            "однозначно сопоставлены."
+        )
     print()
     print("=" * 70)
     print("DRY RUN ЗАВЕРШЁН")
@@ -982,55 +1478,127 @@ def analyze_import(
 
 def commit_import(
     db,
-    prepared: list[
-        tuple[
-            str,
-            dict[str, Any],
-        ]
-    ],
+    plan: dict[str, Any],
 ) -> None:
+    """
+    Применяет уже рассчитанный план синхронизации.
+
+    Создаются только новые документы.
+    Обновляются только изменённые документы.
+    Удаляются только документы из plan["delete"].
+    Неизменённые документы не записываются повторно.
+    """
+
     print()
     print("=" * 70)
     print("ЗАПИСЬ В FIRESTORE")
     print("=" * 70)
 
-    if not prepared:
-        print(
-            "Нет документов для записи."
+    create_ids = list(
+        plan.get(
+            "create",
+            [],
         )
-        return
-
-    check_document_id_collisions(
-        prepared,
     )
 
+    update_ids = list(
+        plan.get(
+            "update",
+            [],
+        )
+    )
+
+    delete_ids = list(
+        plan.get(
+            "delete",
+            [],
+        )
+    )
+
+    prepared = plan.get(
+        "prepared",
+        {},
+    )
+
+    operations: list[
+        tuple[
+            str,
+            str,
+        ]
+    ] = []
+
+    for document_id in create_ids:
+        operations.append(
+            (
+                "set",
+                document_id,
+            )
+        )
+
+    for document_id in update_ids:
+        operations.append(
+            (
+                "set",
+                document_id,
+            )
+        )
+
+    for document_id in delete_ids:
+        operations.append(
+            (
+                "delete",
+                document_id,
+            )
+        )
+
+    if not operations:
+        print(
+            "Изменений нет. "
+            "Firestore не изменён."
+        )
+        print("=" * 70)
+        return
+
     batch_size = 400
-    written = 0
+    processed = 0
 
     for start in range(
         0,
-        len(prepared),
+        len(operations),
         batch_size,
     ):
-        chunk = prepared[
+        chunk = operations[
             start:start + batch_size
         ]
 
         batch = db.batch()
 
         for (
+            action,
             document_id,
-            lesson,
         ) in chunk:
             reference = (
                 db.collection("lessons")
                 .document(document_id)
             )
 
-            # Полностью заменяем документ.
-            #
-            # Это не оставляет старые поля
-            # после изменения схемы данных.
+            if action == "delete":
+                batch.delete(
+                    reference
+                )
+                continue
+
+            lesson = prepared.get(
+                document_id
+            )
+
+            if lesson is None:
+                raise ValueError(
+                    "Не найдены данные "
+                    "подготовленного занятия: "
+                    f"{document_id}"
+                )
+
             batch.set(
                 reference,
                 lesson,
@@ -1039,24 +1607,39 @@ def commit_import(
 
         batch.commit()
 
-        written += len(
+        processed += len(
             chunk
         )
 
         print(
-            f"Записано: "
-            f"{written}/"
-            f"{len(prepared)}"
+            "Обработано операций: "
+            f"{processed}/"
+            f"{len(operations)}"
         )
 
     print()
     print(
-        "Импорт завершён."
+        "Синхронизация завершена."
     )
 
     print(
-        "Обработано документов: "
-        f"{written}"
+        "Создано: "
+        f"{len(create_ids)}"
+    )
+
+    print(
+        "Обновлено: "
+        f"{len(update_ids)}"
+    )
+
+    print(
+        "Удалено: "
+        f"{len(delete_ids)}"
+    )
+
+    print(
+        "Без изменений: "
+        f"{len(plan.get('unchanged', []))}"
     )
 
     print("=" * 70)
@@ -1085,6 +1668,14 @@ def main() -> None:
             "в Firestore"
         ),
     )
+    parser.add_argument(
+        "--allow-delete",
+        action="store_true",
+        help=(
+            "Разрешить удаление устаревших "
+            "занятий при --commit"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1102,7 +1693,23 @@ def main() -> None:
         db,
         data,
     )
+    schedule_date = str(
+        data.get(
+            "date",
+            "",
+        )
+        or ""
+    ).strip()
 
+    sync_plan = build_sync_plan(
+        db,
+        schedule_date,
+        prepared,
+    ) 
+
+    print_sync_plan(
+        sync_plan
+    )
     if not args.commit:
         print(
             "Это был только предварительный "
@@ -1121,6 +1728,38 @@ def main() -> None:
 
         return
 
+    if (
+        sync_plan["delete"]
+        and not args.allow_delete
+    ):
+        print()
+        print("=" * 70)
+        print(
+            "ЗАПИСЬ ЗАБЛОКИРОВАНА"
+        )
+        print("=" * 70)
+
+        print(
+            "План содержит удаление "
+            f"{len(sync_plan['delete'])} "
+            "устаревших занятий."
+        )
+
+        print(
+            "Для удаления необходимо "
+            "явно добавить флаг "
+            "--allow-delete."
+        )
+
+        print(
+            "Firestore НЕ изменён."
+        )
+
+        raise ValueError(
+            "Удаление заблокировано без "
+            "--allow-delete."
+        )
+
     print()
     print(
         "ВНИМАНИЕ: включён режим --commit."
@@ -1128,7 +1767,7 @@ def main() -> None:
 
     commit_import(
         db,
-        prepared,
+        sync_plan,
     )
 
 

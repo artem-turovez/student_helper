@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
+from teacher_names import normalize_teacher_name
 import pdfplumber
 
 
@@ -1241,8 +1241,14 @@ def split_subject_and_people(
                     cleaned
                 )
             ):
+                canonical_name = (
+                    normalize_teacher_name(
+                        cleaned
+                    )
+                )
+
                 teachers.append(
-                    cleaned
+                    canonical_name
                 )
 
     return (
