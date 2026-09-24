@@ -58,3 +58,8 @@ tools/schedule_parser/service-account.json
 # Schedule parser validation reports
 tools/schedule_parser/validator_*.txt
 /android/build/
+
+# Android release signing
+/android/key.properties
+*.jks
+*.keystore
