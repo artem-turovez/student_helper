@@ -75,6 +75,20 @@ service cloud.firestore {
       return isAssignedStudent() || isTeacher();
     }
 
+    function isValidOptionalString(value, maxLength) {
+      return value == null
+             || (
+               value is string
+               && value.size() <= maxLength
+             );
+    }
+
+    function isValidRequiredString(value, maxLength) {
+      return value is string
+             && value.size() > 0
+             && value.size() <= maxLength;
+    }
+
     function academicEventLesson(data) {
       return get(
         /databases/$(database)/documents/lessons/$(data.lessonId)
@@ -91,7 +105,11 @@ service cloud.firestore {
              && academicEventLesson(data).data.teacherIds is list
              && currentUser().data.teacherId
                 in academicEventLesson(data).data.teacherIds
-             && academicEventLesson(data).data.subject == data.subject;
+             && academicEventLesson(data).data.subject == data.subject
+             && academicEventLesson(data).data.date is timestamp
+&& academicEventLesson(data).data.date.year() == data.date.year()
+&& academicEventLesson(data).data.date.month() == data.date.month()
+&& academicEventLesson(data).data.date.day() == data.date.day();
     }
 
     function validAcademicEvent(data) {
@@ -105,22 +123,36 @@ service cloud.firestore {
                'description',
                'date'
              ])
-             && data.groupId is string
-             && data.groupId.size() > 0
+             && isValidRequiredString(data.groupId, 50)
              && teacherHasGroup(data.groupId)
-             && data.teacherId is string
+             && isValidRequiredString(data.teacherId, 150)
              && data.teacherId == currentUser().data.teacherId
-             && data.subject is string
-             && data.subject.size() > 0
-             && data.type is string
-             && data.type.size() > 0
-             && data.title is string
-             && data.title.size() > 0
-             && data.title.size() <= 100
+             && isValidRequiredString(data.subject, 200)
+             && isValidRequiredString(data.type, 100)
+             && isValidRequiredString(data.title, 100)
              && data.description is string
              && data.description.size() <= 500
              && data.date is timestamp
              && academicEventHasValidLesson(data);
+    }
+
+    function validPublicProfileEditableFields(data) {
+      return isValidOptionalString(data.phone, 50)
+             && isValidOptionalString(data.telegram, 100)
+             && data.showEmail is bool
+             && data.showPhone is bool
+             && data.showTelegram is bool;
+    }
+
+    function validTeacherEditableFields(data) {
+      return isValidOptionalString(data.email, 254)
+             && isValidOptionalString(data.phone, 50)
+             && isValidOptionalString(data.telegram, 100)
+             && isValidOptionalString(data.department, 200)
+             && isValidOptionalString(data.photoUrl, 2000)
+             && data.showEmail is bool
+             && data.showPhone is bool
+             && data.showTelegram is bool;
     }
 
 
@@ -140,9 +172,14 @@ service cloud.firestore {
                       'teacherId',
                       'createdAt'
                     ])
-                    && request.resource.data.name is string
-                    && request.resource.data.name.size() > 0
-                    && request.resource.data.email is string
+                    && isValidRequiredString(
+                      request.resource.data.name,
+                      100
+                    )
+                    && isValidRequiredString(
+                      request.resource.data.email,
+                      254
+                    )
                     && request.auth.token.email != null
                     && request.resource.data.email ==
                        request.auth.token.email
@@ -192,9 +229,9 @@ service cloud.firestore {
                           'showPhone',
                           'showTelegram'
                         ])
-                    && request.resource.data.showEmail is bool
-                    && request.resource.data.showPhone is bool
-                    && request.resource.data.showTelegram is bool;
+                    && validPublicProfileEditableFields(
+                      request.resource.data
+                    );
 
       allow delete: if false;
     }
@@ -224,7 +261,10 @@ service cloud.firestore {
                           'showEmail',
                           'showPhone',
                           'showTelegram'
-                        ]);
+                        ])
+                    && validTeacherEditableFields(
+                      request.resource.data
+                    );
 
       allow delete: if false;
     }
