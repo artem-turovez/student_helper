@@ -46,6 +46,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
   List<Lesson> _lessons = [];
 
   Lesson? _selectedLesson;
+  String? _selectedGroupId;
 
   late DateTime _selectedDate;
   late String _selectedType;
@@ -55,6 +56,54 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
   bool _hasLessonsError = false;
 
   bool get _isEditing => widget.event != null;
+
+  List<Lesson> get _lessonsForSelectedDate {
+    return _lessons.where((lesson) {
+      final DateTime? date = lesson.date;
+
+      return date != null && _isSameDay(date, _selectedDate);
+    }).toList();
+  }
+
+  List<String> get _groupsForSelectedDate {
+    final Set<String> groups = {};
+
+    for (final Lesson lesson in _lessonsForSelectedDate) {
+      final String groupId = lesson.groupId?.trim() ?? '';
+
+      if (groupId.isNotEmpty) {
+        groups.add(groupId);
+      }
+    }
+
+    final List<String> result = groups.toList()..sort();
+
+    return result;
+  }
+
+  List<Lesson> get _lessonsForSelectedGroup {
+    final String? groupId = _selectedGroupId;
+
+    if (groupId == null) {
+      return [];
+    }
+
+    final List<Lesson> result = _lessonsForSelectedDate.where((lesson) {
+      return lesson.groupId?.trim() == groupId;
+    }).toList();
+
+    result.sort((first, second) {
+      final int numberComparison = first.number.compareTo(second.number);
+
+      if (numberComparison != 0) {
+        return numberComparison;
+      }
+
+      return first.time.compareTo(second.time);
+    });
+
+    return result;
+  }
 
   @override
   void initState() {
@@ -118,7 +167,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
 
       validLessons.sort(_compareLessons);
 
-      final Lesson? selectedLesson = _findInitialLesson(validLessons);
+      final Lesson? initialLesson = _findInitialLesson(validLessons);
 
       if (!mounted) {
         return;
@@ -126,21 +175,27 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
 
       setState(() {
         _lessons = validLessons;
-        _selectedLesson = selectedLesson;
+        _selectedLesson = initialLesson;
 
-        final DateTime? lessonDate = selectedLesson?.date;
+        if (initialLesson != null) {
+          final DateTime? lessonDate = initialLesson.date;
 
-        if (lessonDate != null) {
-          _selectedDate = DateTime(
-            lessonDate.year,
-            lessonDate.month,
-            lessonDate.day,
-          );
+          if (lessonDate != null) {
+            _selectedDate = DateTime(
+              lessonDate.year,
+              lessonDate.month,
+              lessonDate.day,
+            );
+          }
+
+          _selectedGroupId = initialLesson.groupId?.trim();
         }
 
         _isLoadingLessons = false;
         _hasLessonsError = false;
       });
+
+      _autoSelectIfPossible();
     } on FirebaseException catch (error) {
       debugPrint(
         'Ошибка Firebase при загрузке занятий для учебного события: '
@@ -154,6 +209,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
       setState(() {
         _lessons = [];
         _selectedLesson = null;
+        _selectedGroupId = null;
         _isLoadingLessons = false;
         _hasLessonsError = true;
       });
@@ -167,6 +223,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
       setState(() {
         _lessons = [];
         _selectedLesson = null;
+        _selectedGroupId = null;
         _isLoadingLessons = false;
         _hasLessonsError = true;
       });
@@ -217,7 +274,11 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
         continue;
       }
 
-      final DateTime lessonDay = DateTime(date.year, date.month, date.day);
+      final DateTime lessonDay = DateTime(
+        date.year,
+        date.month,
+        date.day,
+      );
 
       if (!lessonDay.isBefore(selectedDay)) {
         return lesson;
@@ -258,6 +319,233 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
         first.day == second.day;
   }
 
+  void _autoSelectIfPossible() {
+    if (!mounted) {
+      return;
+    }
+
+    final List<String> groups = _groupsForSelectedDate;
+
+    if (_selectedGroupId == null && groups.length == 1) {
+      setState(() {
+        _selectedGroupId = groups.first;
+      });
+    }
+
+    final List<Lesson> lessons = _lessonsForSelectedGroup;
+
+    if (_selectedLesson == null && lessons.length == 1) {
+      setState(() {
+        _selectedLesson = lessons.first;
+      });
+    }
+  }
+
+  Future<void> _selectDate() async {
+    if (_isSaving || _isLoadingLessons) {
+      return;
+    }
+
+    DateTime firstDate = _selectedDate;
+
+    if (_lessons.isNotEmpty) {
+      final Iterable<DateTime> dates = _lessons
+          .map((lesson) => lesson.date)
+          .whereType<DateTime>();
+
+      if (dates.isNotEmpty) {
+        firstDate = dates.reduce(
+          (first, second) => first.isBefore(second) ? first : second,
+        );
+      }
+    }
+
+    DateTime lastDate = _selectedDate;
+
+    if (_lessons.isNotEmpty) {
+      final Iterable<DateTime> dates = _lessons
+          .map((lesson) => lesson.date)
+          .whereType<DateTime>();
+
+      if (dates.isNotEmpty) {
+        lastDate = dates.reduce(
+          (first, second) => first.isAfter(second) ? first : second,
+        );
+      }
+    }
+
+    final DateTime? result = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(
+        firstDate.year,
+        firstDate.month,
+        firstDate.day,
+      ),
+      lastDate: DateTime(
+        lastDate.year,
+        lastDate.month,
+        lastDate.day,
+      ),
+      helpText: 'Выберите дату',
+      cancelText: 'Отмена',
+      confirmText: 'Выбрать',
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedDate = DateTime(
+        result.year,
+        result.month,
+        result.day,
+      );
+
+      _selectedGroupId = null;
+      _selectedLesson = null;
+    });
+
+    _autoSelectIfPossible();
+  }
+
+  Future<void> _showGroupPicker() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final List<String> groups = _groupsForSelectedDate;
+
+    if (groups.isEmpty) {
+      _showMessage('На выбранную дату занятий нет');
+      return;
+    }
+
+    final String? result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.secondaryText.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                ),
+
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.groups_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Выберите группу',
+                        style: AppTheme.sectionTitle,
+                      ),
+                    ],
+                  ),
+                ),
+
+                Flexible(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+                    itemCount: groups.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final String group = groups[index];
+                      final bool selected = group == _selectedGroupId;
+
+                      return Material(
+                        color: selected
+                            ? AppTheme.primaryBlue.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.smallRadius,
+                        ),
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.smallRadius,
+                            ),
+                          ),
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryBlue.withValues(
+                                alpha: selected ? 0.18 : 0.10,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.smallRadius,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.groups_outlined,
+                              color: AppTheme.primaryBlue,
+                            ),
+                          ),
+                          title: Text(
+                            group,
+                            style: AppTheme.cardTitle,
+                          ),
+                          trailing: selected
+                              ? const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppTheme.primaryBlue,
+                                )
+                              : const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppTheme.secondaryText,
+                                ),
+                          onTap: () {
+                            Navigator.of(context).pop(group);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedGroupId = result;
+      _selectedLesson = null;
+    });
+
+    _autoSelectIfPossible();
+  }
+
   Future<void> _save() async {
     if (_isSaving) {
       return;
@@ -270,7 +558,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
     final Lesson? lesson = _selectedLesson;
 
     if (lesson == null) {
-      _showMessage('Выберите занятие');
+      _showMessage('Выберите пару');
       return;
     }
 
@@ -386,8 +674,11 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
   }
 
   String _formatDate(DateTime date) {
@@ -397,23 +688,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
     return '$day.$month.${date.year}';
   }
 
-  String _lessonLabel(Lesson lesson) {
-    final DateTime? date = lesson.date;
-
-    final String dateText = date == null ? 'Без даты' : _formatDate(date);
-
-    final String groupId = lesson.groupId?.trim().isNotEmpty == true
-        ? lesson.groupId!.trim()
-        : 'Без группы';
-
-    final String subject = lesson.subject.trim().isEmpty
-        ? 'Предмет не указан'
-        : lesson.subject.trim();
-
-    return '$subject • $groupId • $dateText';
-  }
-
-  Widget _buildLessonsField() {
+  Widget _buildLessonSelection() {
     if (_isLoadingLessons) {
       return const _StateCard(
         child: Row(
@@ -421,7 +696,9 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
             SizedBox(
               width: 22,
               height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+              ),
             ),
             SizedBox(width: 14),
             Expanded(
@@ -465,7 +742,10 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, color: AppTheme.secondaryText),
+            Icon(
+              Icons.info_outline,
+              color: AppTheme.secondaryText,
+            ),
             SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -479,51 +759,69 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
       );
     }
 
-    return DropdownButtonFormField<Lesson>(
-      initialValue: _selectedLesson,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        labelText: 'Предмет и группа',
-        prefixIcon: Icon(Icons.school_outlined),
-      ),
-      items: _lessons.map((lesson) {
-        return DropdownMenuItem<Lesson>(
-          value: lesson,
-          child: Text(
-            _lessonLabel(lesson),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+    final List<String> groups = _groupsForSelectedDate;
+    final List<Lesson> groupLessons = _lessonsForSelectedGroup;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SelectionTile(
+          icon: Icons.calendar_month_outlined,
+          title: 'Дата',
+          value: _formatDate(_selectedDate),
+          onTap: _selectDate,
+        ),
+
+        const SizedBox(height: 12),
+
+        _SelectionTile(
+          icon: Icons.groups_outlined,
+          title: 'Группа',
+          value: _selectedGroupId ?? 'Выберите группу',
+          enabled: groups.isNotEmpty,
+          onTap: _showGroupPicker,
+        ),
+
+        if (groups.isEmpty) ...[
+          const SizedBox(height: 10),
+          const _HintCard(
+            icon: Icons.event_busy_outlined,
+            text: 'На эту дату у преподавателя нет занятий.',
           ),
-        );
-      }).toList(),
-      onChanged: _isSaving
-          ? null
-          : (lesson) {
-              if (lesson == null) {
-                return;
-              }
+        ],
 
-              final DateTime? lessonDate = lesson.date;
+        if (_selectedGroupId != null && groupLessons.isNotEmpty) ...[
+          const SizedBox(height: 22),
 
-              setState(() {
-                _selectedLesson = lesson;
+          const Text(
+            'Выберите пару',
+            style: AppTheme.labelText,
+          ),
 
-                if (lessonDate != null) {
-                  _selectedDate = DateTime(
-                    lessonDate.year,
-                    lessonDate.month,
-                    lessonDate.day,
-                  );
-                }
-              });
-            },
-      validator: (lesson) {
-        if (lesson == null) {
-          return 'Выберите занятие';
-        }
+          const SizedBox(height: 10),
 
-        return null;
-      },
+          ...groupLessons.map((lesson) {
+            final bool selected =
+                (lesson.id?.trim() ?? '') ==
+                (_selectedLesson?.id?.trim() ?? '');
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _LessonChoiceCard(
+                lesson: lesson,
+                selected: selected,
+                onTap: _isSaving
+                    ? null
+                    : () {
+                        setState(() {
+                          _selectedLesson = lesson;
+                        });
+                      },
+              ),
+            );
+          }),
+        ],
+      ],
     );
   }
 
@@ -533,7 +831,11 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Редактирование события' : 'Учебное событие'),
+        title: Text(
+          _isEditing
+              ? 'Редактирование события'
+              : 'Учебное событие',
+        ),
       ),
       body: SafeArea(
         child: Form(
@@ -556,26 +858,35 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
               const SizedBox(height: 8),
 
               const Text(
+                'Выберите дату, группу и пару. '
                 'Событие будет доступно учащимся выбранной группы.',
                 style: AppTheme.secondaryBodyText,
               ),
 
               const SizedBox(height: 28),
 
-              const Text('Предмет и группа', style: AppTheme.sectionTitle),
+              const Text(
+                'Занятие',
+                style: AppTheme.sectionTitle,
+              ),
 
               const SizedBox(height: 12),
 
-              _buildLessonsField(),
+              _buildLessonSelection(),
 
               if (selectedLesson != null) ...[
                 const SizedBox(height: 12),
-                _LessonInfoCard(lesson: selectedLesson),
+                _LessonInfoCard(
+                  lesson: selectedLesson,
+                ),
               ],
 
               const SizedBox(height: 26),
 
-              const Text('Событие', style: AppTheme.sectionTitle),
+              const Text(
+                'Событие',
+                style: AppTheme.sectionTitle,
+              ),
 
               const SizedBox(height: 12),
 
@@ -583,7 +894,9 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
                 initialValue: _selectedType,
                 decoration: const InputDecoration(
                   labelText: 'Тип события',
-                  prefixIcon: Icon(Icons.category_outlined),
+                  prefixIcon: Icon(
+                    Icons.category_outlined,
+                  ),
                 ),
                 items: _eventTypes.map((type) {
                   return DropdownMenuItem<String>(
@@ -644,63 +957,20 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
                   labelText: 'Описание',
                   hintText: 'Дополнительная информация',
                   alignLabelWithHint: true,
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.card,
-                  borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.smallRadius,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.calendar_month_outlined,
-                        color: AppTheme.primaryBlue,
-                      ),
-                    ),
-
-                    const SizedBox(width: 14),
-
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Дата события', style: AppTheme.labelText),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatDate(_selectedDate),
-                            style: AppTheme.cardTitle,
-                          ),
-                          const SizedBox(height: 3),
-                          const Text(
-                            'Определяется выбранной парой',
-                            style: AppTheme.secondaryBodyText,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  prefixIcon: Icon(
+                    Icons.notes_outlined,
+                  ),
                 ),
               ),
 
               const SizedBox(height: 30),
 
               FilledButton.icon(
-                onPressed: _isSaving || _isLoadingLessons || _lessons.isEmpty
+                onPressed:
+                    _isSaving ||
+                        _isLoadingLessons ||
+                        _lessons.isEmpty ||
+                        _selectedLesson == null
                     ? null
                     : _save,
                 icon: _isSaving
@@ -712,7 +982,9 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.check_rounded),
+                    : const Icon(
+                        Icons.check_rounded,
+                      ),
                 label: Text(
                   _isSaving
                       ? 'Сохранение...'
@@ -729,10 +1001,238 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
   }
 }
 
+class _SelectionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _SelectionTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(
+                    alpha: enabled ? 0.14 : 0.06,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.smallRadius,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: enabled
+                      ? AppTheme.primaryBlue
+                      : AppTheme.secondaryText,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppTheme.secondaryBodyText,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: AppTheme.cardTitle,
+                    ),
+                  ],
+                ),
+              ),
+
+              Icon(
+                Icons.chevron_right_rounded,
+                color: enabled
+                    ? AppTheme.secondaryText
+                    : AppTheme.secondaryText.withValues(
+                        alpha: 0.4,
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LessonChoiceCard extends StatelessWidget {
+  final Lesson lesson;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _LessonChoiceCard({
+    required this.lesson,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String subject = lesson.subject.trim().isEmpty
+        ? 'Предмет не указан'
+        : lesson.subject.trim();
+
+    final String room = lesson.room.trim();
+
+    return Material(
+      color: selected
+          ? AppTheme.primaryBlue.withValues(alpha: 0.12)
+          : AppTheme.card,
+      borderRadius: BorderRadius.circular(
+        AppTheme.cardRadius,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(
+              AppTheme.cardRadius,
+            ),
+            border: Border.all(
+              color: selected
+                  ? AppTheme.primaryBlue.withValues(alpha: 0.65)
+                  : Colors.transparent,
+              width: 1.4,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(
+                    alpha: selected ? 0.18 : 0.10,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.smallRadius,
+                  ),
+                ),
+                child: Text(
+                  '${lesson.number}',
+                  style: AppTheme.cardTitle,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${lesson.number} пара',
+                            style: AppTheme.cardTitle,
+                          ),
+                        ),
+                        if (selected)
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppTheme.primaryBlue,
+                            size: 22,
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      lesson.time,
+                      style: AppTheme.secondaryBodyText,
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      subject,
+                      style: AppTheme.labelText,
+                    ),
+
+                    if (room.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.meeting_room_outlined,
+                            size: 16,
+                            color: AppTheme.secondaryText,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              room,
+                              style: AppTheme.secondaryBodyText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    if (lesson.subgroup?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Подгруппа: ${lesson.subgroup}',
+                        style: AppTheme.secondaryBodyText,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LessonInfoCard extends StatelessWidget {
   final Lesson lesson;
 
-  const _LessonInfoCard({required this.lesson});
+  const _LessonInfoCard({
+    required this.lesson,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -742,19 +1242,28 @@ class _LessonInfoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.primaryBlue.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        color: AppTheme.primaryBlue.withValues(
+          alpha: 0.08,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(lesson.subject, style: AppTheme.cardTitle),
+          Text(
+            lesson.subject,
+            style: AppTheme.cardTitle,
+          ),
 
           const SizedBox(height: 10),
 
           _InfoRow(
             icon: Icons.groups_outlined,
-            text: groupId.isEmpty ? 'Группа не указана' : 'Группа $groupId',
+            text: groupId.isEmpty
+                ? 'Группа не указана'
+                : 'Группа $groupId',
           ),
 
           const SizedBox(height: 7),
@@ -766,7 +1275,10 @@ class _LessonInfoCard extends StatelessWidget {
 
           if (lesson.room.trim().isNotEmpty) ...[
             const SizedBox(height: 7),
-            _InfoRow(icon: Icons.meeting_room_outlined, text: lesson.room),
+            _InfoRow(
+              icon: Icons.meeting_room_outlined,
+              text: lesson.room,
+            ),
           ],
 
           if (lesson.subgroup?.trim().isNotEmpty == true) ...[
@@ -782,20 +1294,75 @@ class _LessonInfoCard extends StatelessWidget {
   }
 }
 
+class _HintCard extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _HintCard({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue.withValues(
+          alpha: 0.06,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppTheme.smallRadius,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 19,
+            color: AppTheme.secondaryText,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.secondaryBodyText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _InfoRow({required this.icon, required this.text});
+  const _InfoRow({
+    required this.icon,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: AppTheme.secondaryText),
+        Icon(
+          icon,
+          size: 18,
+          color: AppTheme.secondaryText,
+        ),
         const SizedBox(width: 9),
-        Expanded(child: Text(text, style: AppTheme.secondaryBodyText)),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTheme.secondaryBodyText,
+          ),
+        ),
       ],
     );
   }
@@ -804,7 +1371,9 @@ class _InfoRow extends StatelessWidget {
 class _StateCard extends StatelessWidget {
   final Widget child;
 
-  const _StateCard({required this.child});
+  const _StateCard({
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -813,7 +1382,9 @@ class _StateCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.card,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        borderRadius: BorderRadius.circular(
+          AppTheme.cardRadius,
+        ),
       ),
       child: child,
     );
