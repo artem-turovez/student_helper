@@ -377,4 +377,165 @@ class NotificationService {
       debugPrint('Не удалось получить FCM token: $error');
     }
   }
+
+  Future<void> scheduleAcademicEventReminder({
+    required String eventId,
+    required String subject,
+    required String type,
+    required String title,
+    required String description,
+    required DateTime eventDate,
+    required String lessonTime,
+    int reminderMinutesBefore = 30,
+  }) async {
+    final int notificationId = _notificationIdForAcademicEvent(eventId);
+
+    await _localNotifications.cancel(id: notificationId);
+
+    if (!_timeZoneInitialized) {
+      debugPrint(
+        'Напоминание учебного события $eventId не запланировано: '
+        'часовой пояс устройства не определён.',
+      );
+      return;
+    }
+
+    final DateTime? lessonStart = _academicEventDateTime(
+      eventDate: eventDate,
+      lessonTime: lessonTime,
+    );
+
+    if (lessonStart == null) {
+      debugPrint(
+        'Напоминание учебного события $eventId не запланировано: '
+        'не удалось определить время пары "$lessonTime".',
+      );
+      return;
+    }
+
+    final DateTime reminderDate = lessonStart.subtract(
+      Duration(minutes: reminderMinutesBefore),
+    );
+
+    if (!reminderDate.isAfter(DateTime.now())) {
+      debugPrint(
+        'Напоминание учебного события $eventId не запланировано: '
+        'время уже прошло.',
+      );
+      return;
+    }
+
+    final tz.TZDateTime scheduledDate = tz.TZDateTime(
+      tz.local,
+      reminderDate.year,
+      reminderDate.month,
+      reminderDate.day,
+      reminderDate.hour,
+      reminderDate.minute,
+      reminderDate.second,
+    );
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        );
+
+    const DarwinNotificationDetails darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    final String normalizedType = type.trim();
+    final String normalizedSubject = subject.trim();
+    final String normalizedDescription = description.trim();
+
+    final String notificationTitle = normalizedType.isNotEmpty
+        ? '$normalizedType • $normalizedSubject'
+        : normalizedSubject;
+
+    final String notificationBody = normalizedDescription.isNotEmpty
+        ? '$title\n$normalizedDescription'
+        : title;
+
+    await _localNotifications.zonedSchedule(
+      id: notificationId,
+      title: notificationTitle,
+      body: notificationBody,
+      scheduledDate: scheduledDate,
+      notificationDetails: notificationDetails,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'academic_event:$eventId',
+    );
+
+    debugPrint(
+      'Напоминание учебного события $eventId запланировано '
+      'на $scheduledDate.',
+    );
+  }
+
+  Future<void> cancelAcademicEventReminder(String eventId) async {
+    final int notificationId = _notificationIdForAcademicEvent(eventId);
+
+    await _localNotifications.cancel(id: notificationId);
+
+    debugPrint('Напоминание учебного события $eventId отменено.');
+  }
+
+  DateTime? _academicEventDateTime({
+    required DateTime eventDate,
+    required String lessonTime,
+  }) {
+    final RegExp timePattern = RegExp(
+      r'^\s*(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})\s*$',
+    );
+
+    final RegExpMatch? match = timePattern.firstMatch(lessonTime);
+
+    if (match == null) {
+      return null;
+    }
+
+    final int? hour = int.tryParse(match.group(1) ?? '');
+    final int? minute = int.tryParse(match.group(2) ?? '');
+
+    if (hour == null ||
+        minute == null ||
+        hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
+      return null;
+    }
+
+    return DateTime(
+      eventDate.year,
+      eventDate.month,
+      eventDate.day,
+      hour,
+      minute,
+    );
+  }
+
+  int _notificationIdForAcademicEvent(String eventId) {
+    int hash = 0x811c9dc5;
+
+    for (final int byte in eventId.codeUnits) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+
+    return 1100000000 + (hash % 900000000);
+  }
 }

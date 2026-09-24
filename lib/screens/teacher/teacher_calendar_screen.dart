@@ -367,6 +367,15 @@ class _TeacherCalendarScreenState extends State<TeacherCalendarScreen> {
     try {
       await _academicEventService.deleteAcademicEvent(eventId: eventId);
 
+      try {
+        await NotificationService.instance.cancelAcademicEventReminder(eventId);
+      } catch (notificationError) {
+        debugPrint(
+          'Ошибка отмены напоминания учебного события: '
+          '$notificationError',
+        );
+      }
+
       await _loadEvents();
 
       if (!mounted) {

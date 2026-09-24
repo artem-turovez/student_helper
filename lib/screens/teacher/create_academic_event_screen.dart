@@ -5,6 +5,7 @@ import '../../app/theme.dart';
 import '../../models/academic_event.dart';
 import '../../models/lesson.dart';
 import '../../services/academic_event_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/schedule_service.dart';
 
 class CreateAcademicEventScreen extends StatefulWidget {
@@ -126,6 +127,17 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
       setState(() {
         _lessons = validLessons;
         _selectedLesson = selectedLesson;
+
+        final DateTime? lessonDate = selectedLesson?.date;
+
+        if (lessonDate != null) {
+          _selectedDate = DateTime(
+            lessonDate.year,
+            lessonDate.month,
+            lessonDate.day,
+          );
+        }
+
         _isLoadingLessons = false;
         _hasLessonsError = false;
       });
@@ -246,28 +258,6 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
         first.day == second.day;
   }
 
-  Future<void> _selectDate() async {
-    final DateTime now = DateTime.now();
-
-    final DateTime? date = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 3),
-      helpText: 'Дата учебного события',
-      cancelText: 'Отмена',
-      confirmText: 'Выбрать',
-    );
-
-    if (date == null) {
-      return;
-    }
-
-    setState(() {
-      _selectedDate = DateTime(date.year, date.month, date.day);
-    });
-  }
-
   Future<void> _save() async {
     if (_isSaving) {
       return;
@@ -287,8 +277,12 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
     final String lessonId = lesson.id?.trim() ?? '';
     final String groupId = lesson.groupId?.trim() ?? '';
     final String subject = lesson.subject.trim();
+    final String lessonTime = lesson.time.trim();
 
-    if (lessonId.isEmpty || groupId.isEmpty || subject.isEmpty) {
+    if (lessonId.isEmpty ||
+        groupId.isEmpty ||
+        subject.isEmpty ||
+        lessonTime.isEmpty) {
       _showMessage('У выбранного занятия отсутствуют необходимые данные');
       return;
     }
@@ -298,8 +292,10 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
     });
 
     try {
+      late final String eventId;
+
       if (_isEditing) {
-        final String eventId = widget.event?.id?.trim() ?? '';
+        eventId = widget.event?.id?.trim() ?? '';
 
         if (eventId.isEmpty) {
           throw Exception('У учебного события отсутствует ID');
@@ -317,7 +313,7 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
           date: _selectedDate,
         );
       } else {
-        await _academicEventService.createAcademicEvent(
+        eventId = await _academicEventService.createAcademicEvent(
           groupId: groupId,
           lessonId: lessonId,
           teacherId: widget.teacherId,
@@ -326,6 +322,23 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
           title: _titleController.text,
           description: _descriptionController.text,
           date: _selectedDate,
+        );
+      }
+
+      try {
+        await NotificationService.instance.scheduleAcademicEventReminder(
+          eventId: eventId,
+          subject: subject,
+          type: _selectedType,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          eventDate: _selectedDate,
+          lessonTime: lessonTime,
+        );
+      } catch (notificationError) {
+        debugPrint(
+          'Ошибка планирования напоминания учебного события: '
+          '$notificationError',
         );
       }
 
@@ -486,8 +499,22 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
       onChanged: _isSaving
           ? null
           : (lesson) {
+              if (lesson == null) {
+                return;
+              }
+
+              final DateTime? lessonDate = lesson.date;
+
               setState(() {
                 _selectedLesson = lesson;
+
+                if (lessonDate != null) {
+                  _selectedDate = DateTime(
+                    lessonDate.year,
+                    lessonDate.month,
+                    lessonDate.day,
+                  );
+                }
               });
             },
       validator: (lesson) {
@@ -623,57 +650,50 @@ class _CreateAcademicEventScreenState extends State<CreateAcademicEventScreen> {
 
               const SizedBox(height: 8),
 
-              Material(
-                color: AppTheme.card,
-                borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                child: InkWell(
-                  onTap: _isSaving ? null : _selectDate,
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
                   borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.smallRadius,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.calendar_month_outlined,
-                            color: AppTheme.primaryBlue,
-                          ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.smallRadius,
                         ),
-
-                        const SizedBox(width: 14),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Дата события',
-                                style: AppTheme.labelText,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatDate(_selectedDate),
-                                style: AppTheme.cardTitle,
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppTheme.secondaryText,
-                        ),
-                      ],
+                      ),
+                      child: const Icon(
+                        Icons.calendar_month_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(width: 14),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Дата события', style: AppTheme.labelText),
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDate(_selectedDate),
+                            style: AppTheme.cardTitle,
+                          ),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Определяется выбранной парой',
+                            style: AppTheme.secondaryBodyText,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
 

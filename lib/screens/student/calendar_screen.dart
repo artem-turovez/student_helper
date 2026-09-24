@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 import '../../models/academic_event.dart';
+import '../../models/lesson.dart';
 import '../../models/personal_event.dart';
 import '../../services/academic_event_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/personal_event_service.dart';
+import '../../services/schedule_service.dart';
 import 'create_personal_event_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -21,6 +23,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   final AcademicEventService _academicEventService = AcademicEventService();
 
   final PersonalEventService _personalEventService = PersonalEventService();
+
+  final ScheduleService _scheduleService = ScheduleService();
 
   late DateTime _visibleMonth;
   late DateTime _selectedDate;
@@ -173,6 +177,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
           groupId: currentGroupId,
           month: _visibleMonth,
         );
+
+        await _syncAcademicEventReminders(
+          groupId: currentGroupId,
+          events: academicEvents,
+        );
       }
 
       final List<PersonalEvent> personalEvents = await _personalEventService
@@ -201,6 +210,86 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _isLoading = false;
         _hasError = true;
       });
+    }
+  }
+
+  Future<void> _syncAcademicEventReminders({
+    required String groupId,
+    required List<AcademicEvent> events,
+  }) async {
+    if (events.isEmpty) {
+      return;
+    }
+
+    final Map<String, List<Lesson>> lessonsByDate = {};
+
+    for (final AcademicEvent event in events) {
+      final String eventId = event.id?.trim() ?? '';
+      final String lessonId = event.lessonId?.trim() ?? '';
+
+      if (eventId.isEmpty || lessonId.isEmpty) {
+        continue;
+      }
+
+      final String dateKey =
+          '${event.date.year}-'
+          '${event.date.month.toString().padLeft(2, '0')}-'
+          '${event.date.day.toString().padLeft(2, '0')}';
+
+      try {
+        List<Lesson>? lessons = lessonsByDate[dateKey];
+
+        if (lessons == null) {
+          lessons = await _scheduleService.getLessonsForDay(
+            groupId: groupId,
+            date: event.date,
+          );
+
+          lessonsByDate[dateKey] = lessons;
+        }
+
+        Lesson? matchingLesson;
+
+        for (final Lesson lesson in lessons) {
+          if (lesson.id?.trim() == lessonId) {
+            matchingLesson = lesson;
+            break;
+          }
+        }
+
+        if (matchingLesson == null) {
+          debugPrint(
+            'Не удалось найти занятие $lessonId '
+            'для учебного события $eventId.',
+          );
+          continue;
+        }
+
+        final String lessonTime = matchingLesson.time.trim();
+
+        if (lessonTime.isEmpty) {
+          debugPrint(
+            'У занятия $lessonId отсутствует время '
+            'для учебного события $eventId.',
+          );
+          continue;
+        }
+
+        await NotificationService.instance.scheduleAcademicEventReminder(
+          eventId: eventId,
+          subject: event.subject,
+          type: event.type,
+          title: event.title,
+          description: event.description,
+          eventDate: event.date,
+          lessonTime: lessonTime,
+        );
+      } catch (error) {
+        debugPrint(
+          'Не удалось синхронизировать напоминание '
+          'учебного события $eventId: $error',
+        );
+      }
     }
   }
 
