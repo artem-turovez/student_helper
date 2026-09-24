@@ -217,8 +217,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     required String groupId,
     required List<AcademicEvent> events,
   }) async {
-    if (events.isEmpty) {
-      return;
+    final Set<String> activeEventIds = events
+        .map((event) => event.id?.trim() ?? '')
+        .where((eventId) => eventId.isNotEmpty)
+        .toSet();
+
+    try {
+      await NotificationService.instance.cancelStaleAcademicEventReminders(
+        activeEventIds: activeEventIds,
+      );
+    } catch (error) {
+      debugPrint(
+        'Не удалось удалить устаревшие напоминания '
+        'учебных событий: $error',
+      );
     }
 
     final Map<String, List<Lesson>> lessonsByDate = {};
@@ -425,8 +437,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Событие удалено')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Событие удалено')),
+      );
     } catch (error) {
       debugPrint('Ошибка удаления события: $error');
 
@@ -584,7 +597,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   const Expanded(
                     child: Text('Календарь', style: AppTheme.pageTitle),
                   ),
-
                   IconButton.filled(
                     onPressed: _openCreatePersonalEvent,
                     style: IconButton.styleFrom(
@@ -754,14 +766,16 @@ class _CalendarCard extends StatelessWidget {
 
               Expanded(
                 child: Text(
-                  '$monthName '
-                  '${visibleMonth.year}',
+                  '$monthName ${visibleMonth.year}',
                   textAlign: TextAlign.center,
                   style: AppTheme.sectionTitle,
                 ),
               ),
 
-              _MonthArrow(icon: Icons.chevron_right_rounded, onPressed: onNext),
+              _MonthArrow(
+                icon: Icons.chevron_right_rounded,
+                onPressed: onNext,
+              ),
             ],
           ),
 
@@ -801,11 +815,8 @@ class _CalendarCard extends StatelessWidget {
               }
 
               final bool selected = isSameDay(day, selectedDate);
-
               final bool today = isSameDay(day, DateTime.now());
-
               final bool academic = hasAcademicEvents(day);
-
               final bool personal = hasPersonalEvents(day);
 
               return Material(
@@ -880,7 +891,10 @@ class _MonthArrow extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
 
-  const _MonthArrow({required this.icon, required this.onPressed});
+  const _MonthArrow({
+    required this.icon,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -899,7 +913,10 @@ class _EventDot extends StatelessWidget {
   final bool isSelected;
   final bool isPersonal;
 
-  const _EventDot({required this.isSelected, required this.isPersonal});
+  const _EventDot({
+    required this.isSelected,
+    required this.isPersonal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -922,7 +939,10 @@ class _EventSectionTitle extends StatelessWidget {
   final String title;
   final Color color;
 
-  const _EventSectionTitle({required this.title, required this.color});
+  const _EventSectionTitle({
+    required this.title,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -931,7 +951,10 @@ class _EventSectionTitle extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 8),
         Text(title, style: AppTheme.cardTitle),
@@ -944,7 +967,10 @@ class _AcademicEventCard extends StatelessWidget {
   final AcademicEvent event;
   final IconData icon;
 
-  const _AcademicEventCard({required this.event, required this.icon});
+  const _AcademicEventCard({
+    required this.event,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -958,7 +984,10 @@ class _AcademicEventCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _EventIconBox(icon: icon, color: AppTheme.primaryBlue),
+          _EventIconBox(
+            icon: icon,
+            color: AppTheme.primaryBlue,
+          ),
 
           const SizedBox(width: 14),
 
@@ -977,11 +1006,17 @@ class _AcademicEventCard extends StatelessWidget {
 
                 const SizedBox(height: 4),
 
-                Text(event.title, style: AppTheme.cardTitle),
+                Text(
+                  event.title,
+                  style: AppTheme.cardTitle,
+                ),
 
                 if (event.description.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(event.description, style: AppTheme.secondaryBodyText),
+                  Text(
+                    event.description,
+                    style: AppTheme.secondaryBodyText,
+                  ),
                 ],
               ],
             ),
@@ -1115,9 +1150,15 @@ class _PersonalEventCard extends StatelessWidget {
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete_outline, color: AppTheme.danger),
+                    Icon(
+                      Icons.delete_outline,
+                      color: AppTheme.danger,
+                    ),
                     SizedBox(width: 10),
-                    Text('Удалить', style: TextStyle(color: AppTheme.danger)),
+                    Text(
+                      'Удалить',
+                      style: TextStyle(color: AppTheme.danger),
+                    ),
                   ],
                 ),
               ),
@@ -1133,7 +1174,10 @@ class _EventIconBox extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _EventIconBox({required this.icon, required this.color});
+  const _EventIconBox({
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1144,7 +1188,11 @@ class _EventIconBox extends StatelessWidget {
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(AppTheme.smallRadius),
       ),
-      child: Icon(icon, color: color, size: 22),
+      child: Icon(
+        icon,
+        color: color,
+        size: 22,
+      ),
     );
   }
 }
@@ -1166,18 +1214,28 @@ class _CalendarMessageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 22,
+        vertical: 26,
+      ),
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(AppTheme.cardRadius),
       ),
       child: Column(
         children: [
-          _EventIconBox(icon: icon, color: iconColor),
+          _EventIconBox(
+            icon: icon,
+            color: iconColor,
+          ),
 
           const SizedBox(height: 14),
 
-          Text(title, textAlign: TextAlign.center, style: AppTheme.cardTitle),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: AppTheme.cardTitle,
+          ),
 
           const SizedBox(height: 6),
 

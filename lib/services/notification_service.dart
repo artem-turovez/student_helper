@@ -484,7 +484,39 @@ class NotificationService {
       'на $scheduledDate.',
     );
   }
+  Future<void> cancelStaleAcademicEventReminders({
+  required Set<String> activeEventIds,
+}) async {
+  final List<PendingNotificationRequest> pendingNotifications =
+      await _localNotifications.pendingNotificationRequests();
 
+  int cancelledCount = 0;
+
+  for (final PendingNotificationRequest notification
+      in pendingNotifications) {
+    final String? payload = notification.payload;
+
+    if (payload == null || !payload.startsWith('academic_event:')) {
+      continue;
+    }
+
+    final String eventId = payload.substring('academic_event:'.length);
+
+    if (activeEventIds.contains(eventId)) {
+      continue;
+    }
+
+    await _localNotifications.cancel(id: notification.id);
+    cancelledCount++;
+  }
+
+  if (cancelledCount > 0) {
+    debugPrint(
+      'Удалено устаревших напоминаний учебных событий: '
+      '$cancelledCount.',
+    );
+  }
+}
   Future<void> cancelAcademicEventReminder(String eventId) async {
     final int notificationId = _notificationIdForAcademicEvent(eventId);
 
