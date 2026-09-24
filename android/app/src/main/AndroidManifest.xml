@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <application
-        android:label="student_helper"
+        android:label="Помощник учащегося"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data
