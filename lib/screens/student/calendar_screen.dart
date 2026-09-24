@@ -223,15 +223,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
         .toSet();
 
     try {
-      await NotificationService.instance.cancelStaleAcademicEventReminders(
-        activeEventIds: activeEventIds,
-      );
-    } catch (error) {
-      debugPrint(
-        'Не удалось удалить устаревшие напоминания '
-        'учебных событий: $error',
-      );
-    }
+  await NotificationService.instance.cancelStaleAcademicEventReminders(
+    activeEventIds: activeEventIds,
+    month: _visibleMonth,
+  );
+} catch (error) {
+  debugPrint(
+    'Не удалось удалить устаревшие напоминания '
+    'учебных событий: $error',
+  );
+}
 
     final Map<String, List<Lesson>> lessonsByDate = {};
 

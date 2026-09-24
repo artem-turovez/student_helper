@@ -476,8 +476,11 @@ class NotificationService {
       scheduledDate: scheduledDate,
       notificationDetails: notificationDetails,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: 'academic_event:$eventId',
-    );
+payload:
+    'academic_event:$eventId:'
+    '${eventDate.year}-'
+    '${eventDate.month.toString().padLeft(2, '0')}',
+        );
 
     debugPrint(
       'Напоминание учебного события $eventId запланировано '
@@ -486,9 +489,13 @@ class NotificationService {
   }
   Future<void> cancelStaleAcademicEventReminders({
   required Set<String> activeEventIds,
+  required DateTime month,
 }) async {
   final List<PendingNotificationRequest> pendingNotifications =
       await _localNotifications.pendingNotificationRequests();
+
+  final String targetMonth =
+      '${month.year}-${month.month.toString().padLeft(2, '0')}';
 
   int cancelledCount = 0;
 
@@ -500,7 +507,30 @@ class NotificationService {
       continue;
     }
 
-    final String eventId = payload.substring('academic_event:'.length);
+    final String payloadData =
+        payload.substring('academic_event:'.length);
+
+    final int monthSeparatorIndex = payloadData.lastIndexOf(':');
+
+    // Старый формат:
+    // academic_event:<eventId>
+    //
+    // Его не удаляем здесь, потому что невозможно надёжно определить,
+    // к какому месяцу относится уведомление.
+    if (monthSeparatorIndex == -1) {
+      continue;
+    }
+
+    final String eventId =
+        payloadData.substring(0, monthSeparatorIndex);
+
+    final String eventMonth =
+        payloadData.substring(monthSeparatorIndex + 1);
+
+    // Синхронизируем только выбранный месяц.
+    if (eventMonth != targetMonth) {
+      continue;
+    }
 
     if (activeEventIds.contains(eventId)) {
       continue;
@@ -512,8 +542,8 @@ class NotificationService {
 
   if (cancelledCount > 0) {
     debugPrint(
-      'Удалено устаревших напоминаний учебных событий: '
-      '$cancelledCount.',
+      'Удалено устаревших напоминаний учебных событий '
+      'за $targetMonth: $cancelledCount.',
     );
   }
 }
