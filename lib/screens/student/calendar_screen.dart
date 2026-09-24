@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../../models/academic_event.dart';
 import '../../models/personal_event.dart';
 import '../../services/academic_event_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/personal_event_service.dart';
 import 'create_personal_event_screen.dart';
 
@@ -236,11 +237,31 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
+    final bool isCompleted = !event.isCompleted;
+
     try {
       await _personalEventService.setCompleted(
         eventId: eventId,
-        isCompleted: !event.isCompleted,
+        isCompleted: isCompleted,
       );
+
+      try {
+        if (isCompleted) {
+          await NotificationService.instance.cancelPersonalEventReminder(
+            eventId,
+          );
+        } else {
+          await NotificationService.instance.schedulePersonalEventReminder(
+            eventId: eventId,
+            title: event.title,
+            description: event.description,
+            eventDate: event.date,
+            reminderMinutesBefore: event.reminderMinutesBefore,
+          );
+        }
+      } catch (error) {
+        debugPrint('Не удалось обновить напоминание личного события: $error');
+      }
 
       await _loadEvents();
     } catch (error) {
@@ -300,6 +321,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     try {
       await _personalEventService.deleteEvent(eventId: eventId);
+
+      try {
+        await NotificationService.instance.cancelPersonalEventReminder(eventId);
+      } catch (error) {
+        debugPrint(
+          'Не удалось отменить напоминание удалённого события: $error',
+        );
+      }
 
       await _loadEvents();
 

@@ -12,6 +12,17 @@ class PersonalEvent {
 
   final bool isCompleted;
 
+  /// За сколько минут до события показать уведомление.
+  ///
+  /// null — напоминание выключено.
+  /// 0 — в момент события.
+  /// 5 — за 5 минут.
+  /// 15 — за 15 минут.
+  /// 30 — за 30 минут.
+  /// 60 — за 1 час.
+  /// 1440 — за 1 день.
+  final int? reminderMinutesBefore;
+
   const PersonalEvent({
     this.id,
     required this.userId,
@@ -20,6 +31,7 @@ class PersonalEvent {
     required this.date,
     this.createdAt,
     this.isCompleted = false,
+    this.reminderMinutesBefore,
   });
 
   factory PersonalEvent.fromFirestore(
@@ -33,31 +45,38 @@ class PersonalEvent {
       );
     }
 
-    final Timestamp? dateTimestamp =
-        data['date'] as Timestamp?;
+    final Timestamp? dateTimestamp = data['date'] as Timestamp?;
 
     if (dateTimestamp == null) {
-      throw Exception(
-        'У личного события ${document.id} не указана дата',
-      );
+      throw Exception('У личного события ${document.id} не указана дата');
     }
 
-    final Timestamp? createdAtTimestamp =
-        data['createdAt'] as Timestamp?;
+    final Timestamp? createdAtTimestamp = data['createdAt'] as Timestamp?;
+
+    final Object? reminderValue = data['reminderMinutesBefore'];
+
+    int? reminderMinutesBefore;
+
+    if (reminderValue is int) {
+      reminderMinutesBefore = reminderValue;
+    } else if (reminderValue is num) {
+      reminderMinutesBefore = reminderValue.toInt();
+    }
 
     return PersonalEvent(
       id: document.id,
       userId: data['userId']?.toString() ?? '',
       title: data['title']?.toString() ?? '',
-      description:
-          data['description']?.toString() ?? '',
+      description: data['description']?.toString() ?? '',
       date: dateTimestamp.toDate(),
       createdAt: createdAtTimestamp?.toDate(),
 
-      // Для старых событий, где этого поля ещё нет,
-      // автоматически считаем событие невыполненным.
-      isCompleted:
-          data['isCompleted'] as bool? ?? false,
+      // Старые события этого поля не имеют.
+      isCompleted: data['isCompleted'] as bool? ?? false,
+
+      // Для старых событий автоматически будет null,
+      // то есть напоминание выключено.
+      reminderMinutesBefore: reminderMinutesBefore,
     );
   }
 
@@ -71,6 +90,7 @@ class PersonalEvent {
           ? FieldValue.serverTimestamp()
           : Timestamp.fromDate(createdAt!),
       'isCompleted': isCompleted,
+      'reminderMinutesBefore': reminderMinutesBefore,
     };
   }
 }
