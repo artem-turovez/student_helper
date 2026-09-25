@@ -11,6 +11,7 @@ from firebase_connection import get_firestore_client
 from teacher_names import (
     normalize_teacher_name,
     get_teacher_surname_key,
+    is_valid_teacher_name,
 )
 
 
@@ -228,6 +229,25 @@ def find_teacher(
             "ambiguous",
             None,
             surname_matches,
+        )
+
+    # Если корректная фамилия отсутствует в Firestore, это не ошибка:
+    # при публикации schedule_api создаст преподавателя автоматически.
+    # Используем тот же стабильный teacherId, что и teacher_importer.
+    if is_valid_teacher_name(canonical_name):
+        from teacher_importer import make_teacher_id
+
+        new_teacher = {
+            "id": make_teacher_id(canonical_name),
+            "name": canonical_name,
+            "data": {},
+            "isNew": True,
+        }
+
+        return (
+            "matched",
+            new_teacher,
+            [new_teacher],
         )
 
     return (
@@ -1451,10 +1471,40 @@ def analyze_import(
 
         print("=" * 70)
 
+        problem_parts: list[str] = []
+
+        if unresolved_names:
+            problem_parts.append(
+                "не распознаны: "
+                + ", ".join(sorted(unresolved_names))
+            )
+
+        if ambiguous_names:
+            ambiguous_parts = []
+
+            for name in sorted(ambiguous_names):
+                candidates = ", ".join(
+                    sorted(ambiguous_names[name])
+                )
+
+                ambiguous_parts.append(
+                    f"{name} (кандидаты: {candidates})"
+                )
+
+            problem_parts.append(
+                "неоднозначные: "
+                + "; ".join(ambiguous_parts)
+            )
+
+        if lessons_not_linked > 0:
+            problem_parts.append(
+                "занятий без полного teacherIds: "
+                f"{lessons_not_linked}"
+            )
+
         raise ValueError(
-            "Импорт заблокирован: "
-            "не все преподаватели "
-            "однозначно сопоставлены."
+            "Импорт заблокирован. "
+            + " | ".join(problem_parts)
         )
     print()
     print("=" * 70)

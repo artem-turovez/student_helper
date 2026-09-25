@@ -2518,8 +2518,7 @@ async def publish_schedule(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
-                "Не удалось опубликовать "
-                "расписание: "
+                "Не удалось опубликовать расписание. "
                 f"{error}"
             ),
         )
